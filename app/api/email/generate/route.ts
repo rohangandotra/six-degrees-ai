@@ -9,8 +9,8 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { userId, contacts, purpose, tone, context } = body
+    const requestBody = await request.json()
+    const { userId, contacts, purpose, tone, context } = requestBody
 
     // Rate limiting
     const rateLimit = checkRateLimit(`email:${userId}`, RATE_LIMITS.emailGen)
