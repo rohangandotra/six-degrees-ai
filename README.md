@@ -8,6 +8,8 @@ npm install
 npm run dev
 ```
 
+Visit http://localhost:3000
+
 ## Environment Variables
 Copy `.env.local.example` to `.env.local` and configure.
 
