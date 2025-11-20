@@ -10,6 +10,73 @@ import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
+// Proper CSV parser that handles quoted values
+function parseCSV(text: string): string[][] {
+  const lines: string[][] = []
+  let currentLine: string[] = []
+  let currentValue = ""
+  let insideQuotes = false
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]
+    const nextChar = text[i + 1]
+
+    if (char === '"') {
+      if (insideQuotes && nextChar === '"') {
+        // Escaped quote
+        currentValue += '"'
+        i++ // Skip next quote
+      } else {
+        // Toggle quote state
+        insideQuotes = !insideQuotes
+      }
+    } else if (char === ',' && !insideQuotes) {
+      // End of field
+      currentLine.push(currentValue.trim())
+      currentValue = ""
+    } else if ((char === '\n' || char === '\r') && !insideQuotes) {
+      // End of line
+      if (currentValue || currentLine.length > 0) {
+        currentLine.push(currentValue.trim())
+        if (currentLine.some(v => v)) { // Only add non-empty lines
+          lines.push(currentLine)
+        }
+        currentLine = []
+        currentValue = ""
+      }
+      // Skip \r\n combinations
+      if (char === '\r' && nextChar === '\n') {
+        i++
+      }
+    } else {
+      currentValue += char
+    }
+  }
+
+  // Handle last field and line
+  if (currentValue || currentLine.length > 0) {
+    currentLine.push(currentValue.trim())
+    if (currentLine.some(v => v)) {
+      lines.push(currentLine)
+    }
+  }
+
+  return lines
+}
+
+// Match header names flexibly
+function matchHeader(header: string): string | null {
+  const normalized = header.toLowerCase().replace(/[^a-z]/g, '')
+
+  if (normalized.includes('name') || normalized.includes('fullname')) return 'full_name'
+  if (normalized.includes('email') || normalized.includes('mail')) return 'email'
+  if (normalized.includes('company') || normalized.includes('organization')) return 'company'
+  if (normalized.includes('title') || normalized.includes('position') || normalized.includes('role') || normalized.includes('job')) return 'position'
+  if (normalized.includes('phone') || normalized.includes('mobile') || normalized.includes('cell')) return 'phone'
+
+  return null
+}
+
 export default function DashboardPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<string | null>(null)
@@ -92,48 +159,93 @@ export default function DashboardPage() {
         throw new Error("Not authenticated")
       }
 
-      // Read CSV file
+      // Read and parse CSV file
       const text = await file.text()
-      const lines = text.split("\n")
-      const headers = lines[0].split(",").map(h => h.trim().toLowerCase())
+      console.log("CSV file read, size:", text.length)
 
-      // Parse CSV rows
+      const rows = parseCSV(text)
+      console.log("Parsed CSV rows:", rows.length)
+
+      if (rows.length < 2) {
+        throw new Error("CSV file is empty or has no data rows")
+      }
+
+      // Parse headers
+      const headerRow = rows[0]
+      const headerMap: { [key: string]: number } = {}
+
+      headerRow.forEach((header, index) => {
+        const field = matchHeader(header)
+        if (field) {
+          headerMap[field] = index
+        }
+      })
+
+      console.log("Header mapping:", headerMap)
+
+      if (!headerMap.full_name || !headerMap.email) {
+        throw new Error("CSV must contain 'Name' and 'Email' columns")
+      }
+
+      // Parse data rows
       const contacts = []
-      for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue
+      const skipped: string[] = []
 
-        const values = lines[i].split(",")
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i]
+
+        const full_name = row[headerMap.full_name]?.trim()
+        const email = row[headerMap.email]?.trim()
+
+        if (!full_name || !email) {
+          skipped.push(`Row ${i + 1}: Missing name or email`)
+          continue
+        }
+
         const contact: any = {
           user_id: user.id,
+          full_name,
+          email,
         }
 
-        headers.forEach((header, index) => {
-          const value = values[index]?.trim()
-          if (header.includes("name")) contact.full_name = value
-          else if (header.includes("email")) contact.email = value
-          else if (header.includes("company")) contact.company = value
-          else if (header.includes("title") || header.includes("position")) contact.position = value
-          else if (header.includes("phone")) contact.phone = value
-        })
-
-        if (contact.full_name && contact.email) {
-          contacts.push(contact)
+        if (headerMap.company !== undefined) {
+          contact.company = row[headerMap.company]?.trim() || null
         }
+        if (headerMap.position !== undefined) {
+          contact.position = row[headerMap.position]?.trim() || null
+        }
+        if (headerMap.phone !== undefined) {
+          contact.phone = row[headerMap.phone]?.trim() || null
+        }
+
+        contacts.push(contact)
+      }
+
+      console.log("Valid contacts to insert:", contacts.length)
+      console.log("Skipped rows:", skipped)
+
+      if (contacts.length === 0) {
+        throw new Error("No valid contacts found in CSV file")
       }
 
       // Insert contacts into database
-      const { error: insertError } = await supabase
+      console.log("Inserting contacts into database...")
+      const { data: insertedData, error: insertError } = await supabase
         .from("contacts")
         .insert(contacts)
+        .select()
 
       if (insertError) {
-        throw insertError
+        console.error("Database insert error:", insertError)
+        throw new Error(`Database error: ${insertError.message}`)
       }
+
+      console.log("Insert successful, rows inserted:", insertedData?.length || contacts.length)
 
       setUploadedFile(file.name)
       toast({
         title: "File uploaded successfully",
-        description: `${file.name} has been processed. ${contacts.length} contacts imported.`,
+        description: `${contacts.length} contacts imported${skipped.length > 0 ? `, ${skipped.length} rows skipped` : ''}`,
       })
 
       // Refresh stats
@@ -146,6 +258,12 @@ export default function DashboardPage() {
         ...prev,
         totalContacts: contactsCount || 0,
       }))
+
+      // Refresh the page to show new contacts
+      setTimeout(() => {
+        router.refresh()
+      }, 1000)
+
     } catch (err: any) {
       console.error("Upload error:", err)
       toast({
@@ -236,11 +354,17 @@ export default function DashboardPage() {
             <label htmlFor="csv-upload" className="cursor-pointer space-y-2">
               <div className="flex justify-center">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Upload className="w-6 h-6 text-primary" />
+                  {isUploading ? (
+                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                  ) : (
+                    <Upload className="w-6 h-6 text-primary" />
+                  )}
                 </div>
               </div>
               <div>
-                <p className="font-medium text-foreground">Click to upload or drag and drop</p>
+                <p className="font-medium text-foreground">
+                  {isUploading ? "Uploading..." : "Click to upload or drag and drop"}
+                </p>
                 <p className="text-sm text-muted-foreground">CSV files up to 10MB</p>
               </div>
               <input
@@ -267,7 +391,12 @@ export default function DashboardPage() {
           <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
             <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-blue-900 dark:text-blue-200">
-              CSV should contain columns: Name, Email, Company, Job Title, Phone (optional)
+              <p className="font-medium mb-1">CSV Format Requirements:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Required columns: <strong>Name</strong> and <strong>Email</strong></li>
+                <li>Optional columns: Company, Job Title, Phone</li>
+                <li>First row must be headers</li>
+              </ul>
             </div>
           </div>
         </CardContent>
