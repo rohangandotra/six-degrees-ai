@@ -4,57 +4,18 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, MoreVertical, Mail, Phone } from "lucide-react"
-import { useState } from "react"
+import { Search, MoreVertical, Mail, Phone, Loader2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { createClient } from "@/lib/supabase/client"
 
-// Mock data
-const mockContacts = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    email: "sarah.johnson@techcorp.com",
-    company: "TechCorp",
-    title: "Senior Product Manager",
-    degree: "1st",
-    phone: "+1 (555) 123-4567",
-  },
-  {
-    id: 2,
-    name: "Michael Chen",
-    email: "m.chen@innovateb.io",
-    company: "InnovateB",
-    title: "CTO",
-    degree: "2nd",
-    phone: "+1 (555) 234-5678",
-  },
-  {
-    id: 3,
-    name: "Emma Rodriguez",
-    email: "emma.r@startupx.com",
-    company: "StartupX",
-    title: "Founder & CEO",
-    degree: "1st",
-    phone: "+1 (555) 345-6789",
-  },
-  {
-    id: 4,
-    name: "James Wilson",
-    email: "j.wilson@finance.co",
-    company: "FinanceHub",
-    title: "Investment Director",
-    degree: "3rd",
-    phone: "+1 (555) 456-7890",
-  },
-  {
-    id: 5,
-    name: "Lisa Park",
-    email: "lisa.park@designstudio.com",
-    company: "Design Studio",
-    title: "Design Lead",
-    degree: "2nd",
-    phone: "+1 (555) 567-8901",
-  },
-]
+interface Contact {
+  id: string
+  full_name: string
+  email: string
+  company: string
+  position: string
+  phone?: string
+}
 
 const degreeColors = {
   "1st": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
@@ -64,12 +25,59 @@ const degreeColors = {
 
 export default function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState("")
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredContacts = mockContacts.filter(
+  useEffect(() => {
+    async function fetchContacts() {
+      const supabase = createClient()
+
+      if (!supabase) {
+        setError("Unable to connect to database")
+        setLoading(false)
+        return
+      }
+
+      try {
+        // Get current user
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+          setError("Please log in to view contacts")
+          setLoading(false)
+          return
+        }
+
+        // Fetch contacts for the current user
+        const { data, error: fetchError } = await supabase
+          .from("contacts")
+          .select("id, full_name, email, company, position, phone")
+          .eq("user_id", user.id)
+          .order("full_name")
+
+        if (fetchError) {
+          console.error("Error fetching contacts:", fetchError)
+          setError("Failed to load contacts")
+        } else {
+          setContacts(data || [])
+        }
+      } catch (err) {
+        console.error("Error:", err)
+        setError("An unexpected error occurred")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchContacts()
+  }, [])
+
+  const filteredContacts = contacts.filter(
     (contact) =>
-      contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.company.toLowerCase().includes(searchTerm.toLowerCase()),
+      contact.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contact.company?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   return (
@@ -98,52 +106,67 @@ export default function ContactsPage() {
       {/* Contacts Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Contacts ({filteredContacts.length})</CardTitle>
+          <CardTitle>
+            All Contacts ({loading ? "..." : filteredContacts.length})
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Name</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Company</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Title</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Degree</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Contact</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredContacts.map((contact) => (
-                  <tr key={contact.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-                    <td className="py-4 px-4 font-medium text-foreground">{contact.name}</td>
-                    <td className="py-4 px-4 text-muted-foreground">{contact.company}</td>
-                    <td className="py-4 px-4 text-muted-foreground">{contact.title}</td>
-                    <td className="py-4 px-4">
-                      <Badge className={degreeColors[contact.degree as keyof typeof degreeColors]}>
-                        {contact.degree}
-                      </Badge>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex gap-2">
-                        <a href={`mailto:${contact.email}`} className="text-primary hover:underline">
-                          <Mail className="w-4 h-4" />
-                        </a>
-                        <a href={`tel:${contact.phone}`} className="text-primary hover:underline">
-                          <Phone className="w-4 h-4" />
-                        </a>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <Button variant="ghost" size="sm">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </td>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Loading contacts...</span>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8 text-red-500">
+              {error}
+            </div>
+          ) : filteredContacts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              {searchTerm ? "No contacts found matching your search" : "No contacts yet. Upload a CSV file to get started!"}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Name</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Company</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Title</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">Contact</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredContacts.map((contact) => (
+                    <tr key={contact.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                      <td className="py-4 px-4 font-medium text-foreground">{contact.full_name}</td>
+                      <td className="py-4 px-4 text-muted-foreground">{contact.company || "—"}</td>
+                      <td className="py-4 px-4 text-muted-foreground">{contact.position || "—"}</td>
+                      <td className="py-4 px-4">
+                        <div className="flex gap-2">
+                          {contact.email && (
+                            <a href={`mailto:${contact.email}`} className="text-primary hover:underline">
+                              <Mail className="w-4 h-4" />
+                            </a>
+                          )}
+                          {contact.phone && (
+                            <a href={`tel:${contact.phone}`} className="text-primary hover:underline">
+                              <Phone className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <Button variant="ghost" size="sm">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
