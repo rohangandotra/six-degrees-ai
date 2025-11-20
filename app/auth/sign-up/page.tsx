@@ -9,6 +9,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
 
 export default function SignUpPage() {
   const [firstName, setFirstName] = useState("")
@@ -43,14 +44,53 @@ export default function SignUpPage() {
 
     setIsLoading(true)
 
-    setTimeout(() => {
-      toast({
-        title: "Account created",
-        description: "Check your email to verify your account",
+    try {
+      const supabase = createClient()
+
+      if (!supabase) {
+        throw new Error("Unable to connect to authentication service")
+      }
+
+      // Create account with Supabase
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+        options: {
+          data: {
+            full_name: `${firstName} ${lastName}`.trim(),
+            first_name: firstName,
+            last_name: lastName,
+          },
+        },
       })
-      router.push("/auth/sign-up-success")
+
+      if (error) {
+        console.error("Signup error:", error)
+        toast({
+          title: "Sign up failed",
+          description: error.message || "Unable to create account",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
+
+      if (data.user) {
+        toast({
+          title: "Account created",
+          description: "Check your email to verify your account",
+        })
+        router.push("/auth/sign-up-success")
+      }
+    } catch (err: any) {
+      console.error("Signup error:", err)
+      toast({
+        title: "Sign up failed",
+        description: err.message || "An unexpected error occurred",
+        variant: "destructive",
+      })
       setIsLoading(false)
-    }, 800)
+    }
   }
 
   return (
@@ -71,6 +111,7 @@ export default function SignUpPage() {
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   disabled={isLoading}
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -81,6 +122,7 @@ export default function SignUpPage() {
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   disabled={isLoading}
+                  required
                 />
               </div>
             </div>
@@ -121,7 +163,7 @@ export default function SignUpPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Creating account..." : "Sign up"}
+              {isLoading ? "Creating account..." : "Create account"}
             </Button>
             <div className="text-center text-sm">
               Already have an account?{" "}

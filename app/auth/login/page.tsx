@@ -9,6 +9,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { createClient } from "@/lib/supabase/client"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -21,22 +22,61 @@ export default function LoginPage() {
     e.preventDefault()
     setIsLoading(true)
 
-    setTimeout(() => {
+    try {
+      const supabase = createClient()
+
+      if (!supabase) {
+        throw new Error("Unable to connect to authentication service")
+      }
+
       if (!email || !password) {
         toast({
           title: "Login failed",
           description: "Please fill in all fields",
           variant: "destructive",
         })
-      } else {
+        setIsLoading(false)
+        return
+      }
+
+      // Sign in with Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      })
+
+      if (error) {
+        console.error("Login error:", error)
+        toast({
+          title: "Login failed",
+          description: error.message || "Invalid email or password",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
+
+      if (data.user) {
         toast({
           title: "Login successful",
           description: "Redirecting to dashboard...",
         })
-        router.push("/dashboard")
+
+        // Wait a brief moment for the toast to show, then redirect
+        setTimeout(() => {
+          router.push("/dashboard")
+          router.refresh() // Refresh to update auth state
+        }, 500)
       }
+    } catch (err: any) {
+      console.error("Login error:", err)
+      toast({
+        title: "Login failed",
+        description: err.message || "An unexpected error occurred",
+        variant: "destructive",
+      })
       setIsLoading(false)
-    }, 800)
+    }
   }
 
   return (
