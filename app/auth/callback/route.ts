@@ -1,0 +1,47 @@
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+export async function GET(request: NextRequest) {
+  const requestUrl = new URL(request.url)
+  const code = requestUrl.searchParams.get('code')
+  const error = requestUrl.searchParams.get('error')
+  const error_description = requestUrl.searchParams.get('error_description')
+  const type = requestUrl.searchParams.get('type')
+
+  // Handle errors from Supabase
+  if (error) {
+    console.error('Auth callback error:', error, error_description)
+    return NextResponse.redirect(
+      `${requestUrl.origin}/auth/error?error=${encodeURIComponent(error_description || error)}`
+    )
+  }
+
+  // Exchange the code for a session
+  if (code) {
+    const supabase = await createClient()
+
+    if (supabase) {
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+      if (exchangeError) {
+        console.error('Code exchange error:', exchangeError)
+        return NextResponse.redirect(
+          `${requestUrl.origin}/auth/error?error=${encodeURIComponent(exchangeError.message)}`
+        )
+      }
+    }
+
+    // Redirect based on type
+    if (type === 'recovery') {
+      // Password reset - redirect to reset password page
+      return NextResponse.redirect(`${requestUrl.origin}/auth/reset-password`)
+    }
+
+    // Default: redirect to dashboard for successful auth
+    return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
+  }
+
+  // No code present, redirect to login
+  return NextResponse.redirect(`${requestUrl.origin}/auth/login`)
+}
