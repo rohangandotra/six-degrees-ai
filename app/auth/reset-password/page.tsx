@@ -9,15 +9,50 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const [hasValidSession, setHasValidSession] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+
+  // Check if user has a valid recovery session
+  useEffect(() => {
+    async function checkSession() {
+      const supabase = createClient()
+
+      if (!supabase) {
+        toast({
+          title: "Configuration error",
+          description: "Unable to connect to authentication service.",
+          variant: "destructive",
+        })
+        setIsCheckingAuth(false)
+        return
+      }
+
+      const { data: { session }, error } = await supabase.auth.getSession()
+
+      if (error || !session) {
+        toast({
+          title: "Invalid or expired reset link",
+          description: "Please request a new password reset link.",
+          variant: "destructive",
+        })
+        setTimeout(() => router.push("/auth/login"), 2000)
+      } else {
+        setHasValidSession(true)
+      }
+      setIsCheckingAuth(false)
+    }
+
+    checkSession()
+  }, [router, toast])
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,6 +76,16 @@ export default function ResetPasswordPage() {
     }
 
     const supabase = createClient()
+
+    if (!supabase) {
+      toast({
+        title: "Configuration error",
+        description: "Unable to connect to authentication service.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -66,6 +111,27 @@ export default function ResetPasswordPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Show loading state while checking session
+  if (isCheckingAuth) {
+    return (
+      <div className="w-full max-w-sm">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Verifying reset link...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Don't show form if session is invalid
+  if (!hasValidSession) {
+    return null
   }
 
   return (
