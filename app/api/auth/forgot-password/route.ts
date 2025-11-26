@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'recovery',
-      email: email
+      email: email.toLowerCase()
     })
 
     if (linkError) {
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     const actionLink = linkData.properties.action_link
 
     await sendEmail({
-      to: email,
+      to: email.toLowerCase(),
       subject: 'Reset Your Password',
       html: getPasswordResetTemplate(actionLink)
     })
