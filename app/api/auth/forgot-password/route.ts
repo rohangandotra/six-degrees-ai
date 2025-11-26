@@ -99,11 +99,21 @@ export async function POST(request: Request) {
 
     const actionLink = linkData.properties.action_link
 
-    await sendEmail({
+    console.log('[Password Reset] Sending email to:', email.toLowerCase())
+    console.log('[Password Reset] RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY)
+
+    const emailResult = await sendEmail({
       to: email.toLowerCase(),
       subject: 'Reset Your Password',
       html: getPasswordResetTemplate(actionLink)
     })
+
+    console.log('[Password Reset] Email send result:', emailResult)
+
+    if (!emailResult.success) {
+      console.error('[Password Reset] Email failed:', emailResult.error)
+      // Still return success to user (don't leak info)
+    }
 
     return NextResponse.json({
       success: true,
