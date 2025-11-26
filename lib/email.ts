@@ -2,39 +2,38 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_EMAIL = 'Sixth Degree <onboarding@resend.dev>'; // Default testing email
-// In production, this should be 'noreply@sixthdegree.app' or similar, after domain verification.
+const FROM_EMAIL = 'Sixth Degree <notifications@mail.sixthdegree.app>';
 
 interface SendEmailParams {
-    to: string;
-    subject: string;
-    html: string;
+  to: string;
+  subject: string;
+  html: string;
 }
 
 export async function sendEmail({ to, subject, html }: SendEmailParams) {
-    if (!process.env.RESEND_API_KEY) {
-        console.warn('⚠️ RESEND_API_KEY is missing. Email not sent.');
-        console.log(`[Mock Email] To: ${to}, Subject: ${subject}`);
-        return { success: false, error: 'Missing API Key' };
-    }
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('⚠️ RESEND_API_KEY is missing. Email not sent.');
+    console.log(`[Mock Email] To: ${to}, Subject: ${subject}`);
+    return { success: false, error: 'Missing API Key' };
+  }
 
-    try {
-        const data = await resend.emails.send({
-            from: FROM_EMAIL,
-            to: to,
-            subject: subject,
-            html: html,
-        });
+  try {
+    const data = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: to,
+      subject: subject,
+      html: html,
+    });
 
-        return { success: true, data };
-    } catch (error) {
-        console.error('❌ Error sending email:', error);
-        return { success: false, error };
-    }
+    return { success: true, data };
+  } catch (error) {
+    console.error('❌ Error sending email:', error);
+    return { success: false, error };
+  }
 }
 
 export function getPasswordResetTemplate(resetUrl: string) {
-    return `
+  return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
       <h2>Reset Your Password</h2>
       <p>You requested a password reset for your Sixth Degree account.</p>
@@ -48,7 +47,7 @@ export function getPasswordResetTemplate(resetUrl: string) {
 }
 
 export function getConnectionRequestTemplate(requesterName: string, acceptUrl: string) {
-    return `
+  return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
       <h2>New Connection Request</h2>
       <p><strong>${requesterName}</strong> wants to connect with you on Sixth Degree.</p>
