@@ -229,7 +229,7 @@ export default function DashboardPage() {
     <div className="p-6 space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard (v2.0)</h1>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard</h1>
         <p className="text-muted-foreground">Welcome back! Manage your professional network.</p>
       </div>
 
@@ -382,21 +382,33 @@ export default function DashboardPage() {
             </CardContent>
           </CollapsibleContent>
         </Card>
-
-
       </Collapsible>
 
-      {/* Debug Section (Required for troubleshooting) */}
-      <Collapsible>
-        <CollapsibleTrigger className="text-xs text-muted-foreground hover:underline">
-          Debug Stats (Click to expand)
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <pre className="mt-2 p-4 bg-muted rounded-md text-xs overflow-auto select-all">
-            {JSON.stringify(stats, null, 2)}
-          </pre>
-        </CollapsibleContent>
-      </Collapsible>
-    </div >
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Navigate to different sections of your network</CardDescription>
+        </CardHeader>
+        <CardContent className="grid md:grid-cols-2 gap-3">
+          <Button
+            variant="outline"
+            className="h-12 justify-start gap-3 bg-transparent"
+            onClick={() => router.push("/dashboard/search")}
+          >
+            <Search className="w-5 h-5" />
+            <span>Search Network with AI</span>
+          </Button>
+          <Button
+            variant="outline"
+            className="h-12 justify-start gap-3 bg-transparent"
+            onClick={() => router.push("/dashboard/contacts")}
+          >
+            <Users className="w-5 h-5" />
+            <span>View All Contacts</span>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
