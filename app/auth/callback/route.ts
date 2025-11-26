@@ -38,6 +38,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${requestUrl.origin}/auth/reset-password`)
     }
 
+    // Check if user has completed onboarding
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const profileResponse = await fetch(`${requestUrl.origin}/api/profile?userId=${user.id}`)
+      const profileData = await profileResponse.json()
+
+      // If no profile or profile not completed, redirect to onboarding
+      if (!profileData.success || !profileData.profile || !profileData.profile.profile_completed) {
+        return NextResponse.redirect(`${requestUrl.origin}/onboarding`)
+      }
+    }
+
     // Default: redirect to dashboard for successful auth
     return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
   }
