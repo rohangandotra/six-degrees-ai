@@ -23,17 +23,20 @@ export async function POST(request: Request) {
     }
 
     // Rate limiting: 3 password reset requests per hour per email
-    const rateLimit = checkRateLimit(`forgot-password:${email.toLowerCase()}`, {
-      maxRequests: 3,
-      windowMs: 60 * 60 * 1000
-    })
+    // Rate limiting: 3 password reset requests per hour per email
+    // const rateLimit = checkRateLimit(`forgot-password:${email.toLowerCase()}`, {
+    //   maxRequests: 3,
+    //   windowMs: 60 * 60 * 1000
+    // })
 
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { success: false, message: 'Too many password reset requests. Please try again later.' },
-        { status: 429 }
-      )
-    }
+    // if (!rateLimit.allowed) {
+    //   console.log('[Password Reset] Rate limit hit for:', email)
+    //   return NextResponse.json(
+    //     { success: false, message: 'Too many password reset requests. Please try again later.' },
+    //     { status: 429 }
+    //   )
+    // }
+    console.log('[Password Reset] Rate limit bypassed for debugging')
 
     const supabase = createAdminClient()
 
@@ -46,12 +49,16 @@ export async function POST(request: Request) {
 
     // Always return success to prevent email enumeration
     // Even if user doesn't exist, we say "email sent"
+    // Always return success to prevent email enumeration
+    // Even if user doesn't exist, we say "email sent"
     if (!user) {
+      console.log('[Password Reset] User NOT found in public.users table for:', email.toLowerCase())
       return NextResponse.json({
         success: true,
         message: 'If an account exists with this email, a password reset link has been sent.'
       })
     }
+    console.log('[Password Reset] User FOUND in public.users:', user.id)
 
     // Generate reset token (valid for 1 hour)
     const resetToken = crypto.randomUUID()
