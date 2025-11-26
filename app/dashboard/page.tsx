@@ -385,7 +385,7 @@ export default function DashboardPage() {
       </Collapsible>
 
       {/* Recent Activity */}
-      <Card>
+      <Card data-version="fixed">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>Navigate to different sections of your network</CardDescription>
