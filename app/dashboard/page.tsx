@@ -226,28 +226,43 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-6 space-y-8">
-      {/* Header */}
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back! Manage your professional network.</p>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-sm md:text-base text-muted-foreground">Welcome to your network management hub</p>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid md:grid-cols-4 gap-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Accessible Contacts</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Accessible Contacts
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {stats.loading ? (
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats.totalContacts}</div>
+                <div className="text-2xl md:text-3xl font-bold">{stats.totalContacts}</div>
                 <p className="text-xs text-muted-foreground mt-1">Your network + shared contacts</p>
               </>
             )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground cursor-help">
+                    <Info className="w-3 h-3" />
+                    <span className="hidden sm:inline">Your network + shared contacts</span>
+                    <span className="sm:hidden">Network + shared</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>This includes your direct contacts plus contacts shared by your connections</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </CardContent>
         </Card>
 
@@ -260,7 +275,7 @@ export default function DashboardPage() {
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
             ) : (
               <>
-                <div className="text-2xl font-bold">{stats.directConnections}</div>
+                <div className="text-2xl md:text-3xl font-bold">{stats.directConnections}</div>
                 <p className="text-xs text-muted-foreground mt-1">
                   People you're connected with
                 </p>
