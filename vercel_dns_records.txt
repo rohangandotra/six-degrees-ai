@@ -1,0 +1,5 @@
+$ORIGIN sixthdegree.app.
+send.mail 60 IN MX 10 feedback-smtp.us-east-1.amazonses.com.
+send.mail 60 IN TXT "v=spf1 include:amazonses.com ~all"
+_dmarc 60 IN TXT "v=DMARC1; p=none;"
+resend._domainkey.mail 60 IN TXT "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCqXgL4s0ASZVPdMiUSqHce01lLUZQu8eqbBSu7aX3nNmuewFSszD+zkCbBgU4kz8cDu1lNTR+PaChz7L6e9hCdIfppXd/2XDTx4bNf+T6DLHdgUtisjIoTqO7Q7o1fke74xk/2ry1Hy4QZBRkrVoYtpYT2f+yGJWfhlGqpeZ533wIDAQAB"

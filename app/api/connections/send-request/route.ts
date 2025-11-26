@@ -104,7 +104,29 @@ export async function POST(request: Request) {
       severity: 'low'
     })
 
-    // TODO: Send email notification to target user
+    // Send email notification to target user
+    const { data: targetUser } = await supabase
+      .from('users')
+      .select('email, full_name')
+      .eq('id', targetUserId)
+      .single()
+
+    const { data: requester } = await supabase
+      .from('users')
+      .select('full_name')
+      .eq('id', userId)
+      .single()
+
+    if (targetUser && targetUser.email && requester) {
+      const { sendEmail, getConnectionRequestTemplate } = await import('@/lib/email')
+      const acceptUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://sixthdegree.app'}/dashboard/network`
+
+      await sendEmail({
+        to: targetUser.email,
+        subject: `New Connection Request from ${requester.full_name}`,
+        html: getConnectionRequestTemplate(requester.full_name, acceptUrl)
+      })
+    }
 
     return NextResponse.json({
       success: true,

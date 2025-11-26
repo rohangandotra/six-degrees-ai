@@ -13,7 +13,8 @@ import crypto from 'crypto'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { email } = body
+    const { email: rawEmail } = body
+    const email = rawEmail?.trim()
 
     if (!email || !isValidEmail(email)) {
       return NextResponse.json(
@@ -38,7 +39,11 @@ export async function POST(request: Request) {
     // }
     console.log('[Password Reset] Rate limit bypassed for debugging')
 
-    const supabase = createAdminClient()
+    // Use direct initialization to match diagnostic script (proven to work)
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Check if user exists
     const { data: user } = await supabase

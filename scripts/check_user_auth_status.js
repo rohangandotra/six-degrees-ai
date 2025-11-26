@@ -47,7 +47,27 @@ async function checkUserAuth(email) {
 async function main() {
     // Check both users
     await checkUserAuth('rohan.gandotra19@gmail.com');
-    await checkUserAuth('mirza.ahmad@gmail.com'); // Replace with the other person's email
+
+    // Search for Anirudh by checking all users with "madhok" in email or name
+    const { data: allUsers } = await supabase.from('users').select('email, full_name');
+    const anirudhUsers = allUsers?.filter(u =>
+        u.email?.toLowerCase().includes('madhok') ||
+        u.full_name?.toLowerCase().includes('anirudh') ||
+        u.full_name?.toLowerCase().includes('madhok')
+    );
+
+    console.log('\n--- Searching for Anirudh Madhok ---');
+    if (anirudhUsers && anirudhUsers.length > 0) {
+        console.log('Found users:');
+        anirudhUsers.forEach(u => console.log(`  - ${u.email} (${u.full_name})`));
+
+        // Check each found user
+        for (const user of anirudhUsers) {
+            await checkUserAuth(user.email);
+        }
+    } else {
+        console.log('❌ No users found matching "Anirudh" or "Madhok"');
+    }
 }
 
 main();
