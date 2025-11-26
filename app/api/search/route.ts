@@ -132,7 +132,7 @@ async function filterWithAI(query: string, purpose: string, uniqueCompanies: str
 
 export async function POST(request: Request) {
   try {
-    const { query, purpose = "any" } = await request.json()
+    const { query, purpose = "any", scope = "extended" } = await request.json()
 
     // 1. Verify Session
     const supabase = await createClient()
@@ -166,63 +166,66 @@ export async function POST(request: Request) {
     const taggedOwnContacts = (ownContacts || []).map((c: any) => ({
       ...c,
       source: 'own' as const,
-      owner_name: null
+      owner_name: 'You',
+      owner_id: userId
     }))
 
-    // 3. Fetch Shared Contacts from Connected Users
+    // 3. Fetch Shared Contacts (if scope is extended)
     let sharedContacts: any[] = []
 
-    // Get connections where user can access shared networks
-    const { data: asRequester } = await adminSupabase
-      .from('user_connections')
-      .select(`
-        connected_user_id,
-        accepter_shares_network,
-       connected_user:users!user_connections_connected_user_id_fkey(full_name)
-      `)
-      .eq('user_id', userId)
-      .eq('status', 'accepted')
-      .eq('accepter_shares_network', true)
+    if (scope === 'extended') {
+      // Get connections where user can access shared networks
+      const { data: asRequester } = await adminSupabase
+        .from('user_connections')
+        .select(`
+          connected_user_id,
+          accepter_shares_network,
+          connected_user:users!user_connections_connected_user_id_fkey(full_name)
+        `)
+        .eq('user_id', userId)
+        .eq('status', 'accepted')
+        .eq('accepter_shares_network', true)
 
-    const { data: asAccepter } = await adminSupabase
-      .from('user_connections')
-      .select(`
-        user_id,
-        requester_shares_network,
-        requester:users!user_connections_user_id_fkey(full_name)
-      `)
-      .eq('connected_user_id', userId)
-      .eq('status', 'accepted')
-      .eq('requester_shares_network', true)
+      const { data: asAccepter } = await adminSupabase
+        .from('user_connections')
+        .select(`
+          user_id,
+          requester_shares_network,
+          requester:users!user_connections_user_id_fkey(full_name)
+        `)
+        .eq('connected_user_id', userId)
+        .eq('status', 'accepted')
+        .eq('requester_shares_network', true)
 
-    // Collect user IDs who share their network
-    const sharingUserIds: { id: string; name: string }[] = [
-      ...(asRequester || []).map((c: any) => ({
-        id: c.connected_user_id,
-        name: c.connected_user.full_name
-      })),
-      ...(asAccepter || []).map((c: any) => ({
-        id: c.user_id,
-        name: c.requester.full_name
-      }))
-    ]
-
-    // Fetch contacts from all sharing users
-    for (const sharingUser of sharingUserIds) {
-      const { data: userContacts } = await adminSupabase
-        .from('contacts')
-        .select('*')
-        .eq('user_id', sharingUser.id)
-        .limit(5000) // Limit per user to avoid overload
-
-      if (userContacts) {
-        const taggedContacts = userContacts.map((c: any) => ({
-          ...c,
-          source: 'shared' as const,
-          owner_name: sharingUser.name,
-          owner_id: sharingUser.id
+      // Collect user IDs who share their network
+      const sharingUserIds: { id: string; name: string }[] = [
+        ...(asRequester || []).map((c: any) => ({
+          id: c.connected_user_id,
+          name: c.connected_user.full_name
+        })),
+        ...(asAccepter || []).map((c: any) => ({
+          id: c.user_id,
+          name: c.requester.full_name
         }))
-        sharedContacts.push(...taggedContacts)
+      ]
+
+      // Fetch contacts from all sharing users
+      for (const sharingUser of sharingUserIds) {
+        const { data: userContacts } = await adminSupabase
+          .from('contacts')
+          .select('*')
+          .eq('user_id', sharingUser.id)
+          .limit(5000) // Limit per user to avoid overload
+
+        if (userContacts) {
+          const taggedContacts = userContacts.map((c: any) => ({
+            ...c,
+            source: 'shared' as const,
+            owner_name: sharingUser.name,
+            owner_id: sharingUser.id
+          }))
+          sharedContacts.push(...taggedContacts)
+        }
       }
     }
 
@@ -233,11 +236,57 @@ export async function POST(request: Request) {
       return NextResponse.json({ results: [] })
     }
 
-    // 4. Extract Unique Metadata
-    const uniqueCompanies = Array.from(new Set(allContacts.map((c: any) => c.company).filter(Boolean)));
-    const uniquePositions = Array.from(new Set(allContacts.map((c: any) => c.position).filter(Boolean)));
+    // 4. Deduplication Logic
+    const contactMap = new Map<string, any>();
 
-    // 4. AI Filtering (with fallback)
+    allContacts.forEach(contact => {
+      // Create a unique key based on normalized name, company, and position
+      // We use a simplified normalization to catch slight variations
+      const name = (contact.full_name || '').toLowerCase().trim();
+      const company = (contact.company || '').toLowerCase().trim();
+      const position = (contact.position || '').toLowerCase().trim();
+
+      // If name is missing, skip
+      if (!name) return;
+
+      const key = `${name}|${company}|${position}`;
+
+      if (contactMap.has(key)) {
+        const existing = contactMap.get(key);
+
+        // Merge logic
+        // 1. Add owner to connected_via list
+        if (contact.owner_name && !existing.connected_via.includes(contact.owner_name)) {
+          existing.connected_via.push(contact.owner_name);
+        }
+
+        // 2. If this is 'own' contact, mark as own (prioritize direct connection)
+        if (contact.source === 'own') {
+          existing.source = 'own';
+          existing.owner_name = 'You';
+        }
+
+        // 3. Keep the most complete data (e.g. if existing is missing email but new has it)
+        if (!existing.email && contact.email) existing.email = contact.email;
+        if (!existing.linkedin_url && contact.linkedin_url) existing.linkedin_url = contact.linkedin_url;
+        if (!existing.location && contact.location) existing.location = contact.location;
+
+      } else {
+        // Initialize new entry
+        contactMap.set(key, {
+          ...contact,
+          connected_via: contact.owner_name ? [contact.owner_name] : []
+        });
+      }
+    });
+
+    const uniqueContacts = Array.from(contactMap.values());
+
+    // 5. Extract Unique Metadata for AI
+    const uniqueCompanies = Array.from(new Set(uniqueContacts.map((c: any) => c.company).filter(Boolean)));
+    const uniquePositions = Array.from(new Set(uniqueContacts.map((c: any) => c.position).filter(Boolean)));
+
+    // 6. AI Filtering (with fallback)
     let aiFilter: any = { selected_companies: [], selected_positions: [], relevant_keywords: [] };
 
     // Only use AI if query is complex enough (more than 2 chars)
@@ -266,11 +315,11 @@ export async function POST(request: Request) {
     const selectedPositions = new Set((aiFilter.selected_positions || []).map((p: string) => p.toLowerCase()));
     const relevantKeywords = (aiFilter.relevant_keywords || []).map((k: string) => k.toLowerCase());
 
-    // 5. Apply Filter & Score
+    // 7. Apply Filter & Score
     const queryLower = query.toLowerCase();
     const queryKeywords = queryLower.split(/\s+/).filter((w: string) => w.length > 2 && !['who', 'works', 'in', 'the', 'and', 'for', 'with'].includes(w));
 
-    const results = allContacts
+    const results = uniqueContacts
       .map((contact: any) => {
         let score = 0;
         const company = (contact.company || '').toLowerCase();
@@ -344,10 +393,10 @@ export async function POST(request: Request) {
       results,
       debug: {
         ...aiFilter,
-        contactCount: allContacts.length,
+        contactCount: uniqueContacts.length,
         userId: userId,
         queryKeywords: queryKeywords,
-        sampleContact: allContacts[0] ? { company: allContacts[0].company, position: allContacts[0].position, source: allContacts[0].source } : null
+        sampleContact: uniqueContacts[0] ? { company: uniqueContacts[0].company, position: uniqueContacts[0].position, source: uniqueContacts[0].source } : null
       }
     })
 
