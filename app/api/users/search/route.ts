@@ -1,106 +1,80 @@
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { sanitizeSearchQuery, checkRateLimit, RATE_LIMITS } from '@/lib/security'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
-/**
- * Search for users by name or organization
- * POST /api/users/search
- *
- * Body:
- * - query: Search query (name or organization)
- * - currentUserId: Current user's ID (to exclude from results)
- * - limit: Max results to return (default: 20)
- */
+// Helper to create Admin Client
+async function createAdminClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+// POST - Search for users to connect with
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { query, currentUserId, limit = 20 } = body
+    const { query } = await request.json()
 
-    if (!query || query.trim().length === 0) {
+    if (!query || query.length < 2) {
       return NextResponse.json(
-        { success: false, message: 'Search query is required' },
+        { error: 'Query must be at least 2 characters' },
         { status: 400 }
       )
     }
 
-    if (!currentUserId) {
-      return NextResponse.json(
-        { success: false, message: 'User ID is required' },
-        { status: 400 }
-      )
+    const supabase = await createClient()
+
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database connection failed' }, { status: 500 })
     }
 
-    // Rate limiting: 30 searches per minute
-    const rateLimit = checkRateLimit(`user-search:${currentUserId}`, {
-      maxRequests: 30,
-      windowMs: 1 * 60 * 1000
-    })
+    const { data: { session } } = await supabase.auth.getSession()
 
-    if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { success: false, message: 'Too many search requests' },
-        { status: 429 }
-      )
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const sanitizedQuery = sanitizeSearchQuery(query)
-    const supabase = createAdminClient()
+    const userId = session.user.id
+    const adminSupabase = await createAdminClient()
 
-    // Search by full_name or organization
-    // Use ilike for case-insensitive pattern matching
-    const { data: users, error } = await supabase
+    // Search users by name or email
+    const { data: users, error } = await adminSupabase
       .from('users')
-      .select('id, email, full_name, organization, created_at')
-      .neq('id', currentUserId)
-      .or(`full_name.ilike.%${sanitizedQuery}%,organization.ilike.%${sanitizedQuery}%`)
-      .limit(limit)
+      .select('id, email, full_name')
+      .neq('id', userId) // Exclude self
+      .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
+      .limit(20)
 
     if (error) {
       console.error('Error searching users:', error)
-      return NextResponse.json(
-        { success: false, message: 'Search failed' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Search failed' }, { status: 500 })
     }
 
-    // For each user, check if there's an existing connection
-    const userIds = users?.map(u => u.id) || []
+    // Get existing connections to filter out
+    const { data: connections } = await adminSupabase
+      .from('user_connections')
+      .select('user_id, connected_user_id')
+      .or(`user_id.eq.${userId},connected_user_id.eq.${userId}`)
 
-    if (userIds.length > 0) {
-      const { data: connections } = await supabase
-        .from('user_connections')
-        .select('user_id, connected_user_id, status')
-        .or(`and(user_id.eq.${currentUserId},connected_user_id.in.(${userIds.join(',')})),and(user_id.in.(${userIds.join(',')}),connected_user_id.eq.${currentUserId})`)
+    const connectedUserIds = new Set(
+      (connections || []).flatMap((c: any) => [c.user_id, c.connected_user_id])
+    )
 
-      // Map connection status to each user
-      const usersWithStatus = users?.map(user => {
-        const connection = connections?.find(
-          c => (c.user_id === currentUserId && c.connected_user_id === user.id) ||
-               (c.connected_user_id === currentUserId && c.user_id === user.id)
-        )
+    // Filter out already connected users
+    const filteredUsers = (users || [])
+      .filter((user: any) => !connectedUserIds.has(user.id))
+      .map((user: any) => ({
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name
+      }))
 
-        return {
-          ...user,
-          connection_status: connection?.status || null,
-          is_connected: connection?.status === 'accepted'
-        }
-      })
+    return NextResponse.json({ users: filteredUsers })
 
-      return NextResponse.json({
-        success: true,
-        users: usersWithStatus || []
-      })
-    }
-
-    return NextResponse.json({
-      success: true,
-      users: users?.map(u => ({ ...u, connection_status: null, is_connected: false })) || []
-    })
-
-  } catch (error) {
-    console.error('Error in user search:', error)
+  } catch (error: any) {
+    console.error('User search error:', error)
     return NextResponse.json(
-      { success: false, message: 'Internal server error' },
+      { error: error.message || 'Internal server error' },
       { status: 500 }
     )
   }

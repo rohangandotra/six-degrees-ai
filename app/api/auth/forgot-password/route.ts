@@ -74,17 +74,40 @@ export async function POST(request: Request) {
       )
     }
 
-    // TODO: Send email with reset link
-    // const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password?token=${resetToken}`
-    // await sendEmail(email, 'Password Reset', resetUrl)
+    // Send email using Resend
+    const { sendEmail, getPasswordResetTemplate } = await import('@/lib/email')
+    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://sixthdegree.app'}/auth/reset-password#type=recovery&access_token=${resetToken}`
+    // Note: We use hash fragment to match what the frontend expects (AuthHashHandler), 
+    // OR we can change frontend to read query param. 
+    // The existing AuthHashHandler looks for #type=recovery&access_token=...
+    // But wait, our custom flow doesn't create a Supabase session, it just verifies the token.
+    // The frontend page `app/auth/reset-password/page.tsx` checks `supabase.auth.getSession()`.
+    // If we use custom token, we need to update the frontend to verify the token against the DB, NOT Supabase Auth.
 
-    console.log(`Password reset token for ${email}: ${resetToken}`)
+    // ACTUALLY: The easiest way is to use Supabase Admin to generate the link, then send it via Resend.
+    // This keeps the frontend standard.
+
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: 'recovery',
+      email: email
+    })
+
+    if (linkError) {
+      console.error('Error generating link:', linkError)
+      return NextResponse.json({ success: false, message: 'Failed to generate reset link' }, { status: 500 })
+    }
+
+    const actionLink = linkData.properties.action_link
+
+    await sendEmail({
+      to: email,
+      subject: 'Reset Your Password',
+      html: getPasswordResetTemplate(actionLink)
+    })
 
     return NextResponse.json({
       success: true,
-      message: 'If an account exists with this email, a password reset link has been sent.',
-      // Remove this in production - only for testing
-      ...(process.env.NODE_ENV === 'development' && { resetToken })
+      message: 'If an account exists with this email, a password reset link has been sent.'
     })
 
   } catch (error) {

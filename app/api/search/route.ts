@@ -1,196 +1,361 @@
+import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { checkRateLimit, RATE_LIMITS, isValidUUID, sanitizeSearchQuery, logSecurityEvent } from '@/lib/security'
+import OpenAI from 'openai'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
+
+// Helper to create Admin Client
+async function createAdminClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+// Helper to use OpenAI for context-aware filtering
+// Generic category map for fallback when AI fails or query is simple
+const CATEGORY_MAP: Record<string, { companies?: string[]; positions?: string[]; keywords?: string[] }> = {
+  tech: {
+    companies: ['Wayfair', 'Stripe', 'Google', 'Meta', 'Apple', 'Amazon', 'Microsoft'],
+    positions: ['Software Engineer', 'Developer', 'CTO', 'Product Manager', 'Data Scientist'],
+    keywords: ['software', 'developer', 'engineer', 'technology', 'saas', 'startup', 'tech']
+  },
+  finance: {
+    companies: ['Goldman Sachs', 'Morgan Stanley', 'JPMorgan', 'Citigroup'],
+    positions: ['Analyst', 'Investment Banker', 'Portfolio Manager'],
+    keywords: ['finance', 'investment', 'banking', 'capital', 'equity']
+  },
+  investor: {
+    companies: ['Sequoia Capital', 'Andreessen Horowitz', 'Accel', 'Kleiner Perkins'],
+    positions: ['Partner', 'Venture Capitalist', 'Angel Investor'],
+    keywords: ['investor', 'venture', 'angel', 'vc', 'funding']
+  }
+  // add more categories as needed
+};
+
+// Purpose-based keyword boost map
+const PURPOSE_BOOST_MAP: Record<string, { positionKeywords: string[]; companyKeywords: string[]; scoreBoost: number }> = {
+  raise_funds: {
+    positionKeywords: ['investor', 'vc', 'venture', 'partner', 'angel', 'gp', 'fund', 'capital'],
+    companyKeywords: ['sequoia', 'andreessen', 'accel', 'benchmark', 'kleiner', 'greylock', 'capital', 'ventures'],
+    scoreBoost: 15
+  },
+  hire_talent: {
+    positionKeywords: ['engineer', 'developer', 'designer', 'product manager', 'data scientist', 'analyst'],
+    companyKeywords: ['google', 'meta', 'apple', 'amazon', 'microsoft', 'stripe', 'airbnb'],
+    scoreBoost: 10
+  },
+  find_mentors: {
+    positionKeywords: ['vp', 'director', 'head', 'chief', 'founder', 'ceo', 'cto', 'cpo', 'lead'],
+    companyKeywords: [],
+    scoreBoost: 12
+  },
+  explore_partnerships: {
+    positionKeywords: ['bd', 'business development', 'partnerships', 'sales', 'ceo', 'founder'],
+    companyKeywords: [],
+    scoreBoost: 10
+  },
+  get_advice: {
+    positionKeywords: ['founder', 'ceo', 'expert', 'specialist', 'consultant', 'advisor'],
+    companyKeywords: [],
+    scoreBoost: 8
+  }
+};
+
+async function filterWithAI(query: string, purpose: string, uniqueCompanies: string[], uniquePositions: string[]) {
+  try {
+    // Limit context size to avoid token limits and latency
+    // Take top 200 items (assuming the list is somewhat sorted or random, it's better than nothing)
+    const companiesList = JSON.stringify(uniqueCompanies.slice(0, 200));
+    const positionsList = JSON.stringify(uniquePositions.slice(0, 200));
+
+    // Build purpose context string
+    let purposeContext = "";
+    if (purpose && purpose !== "any") {
+      const purposeLabels: Record<string, string> = {
+        raise_funds: "raise funds/fundraising",
+        hire_talent: "hiring/recruiting talent",
+        find_mentors: "finding mentors/advisors",
+        explore_partnerships: "exploring partnerships/business development",
+        get_advice: "getting advice/expert guidance"
+      };
+      purposeContext = `\nUser's Purpose: The user wants to ${purposeLabels[purpose] || purpose}. Prioritize contacts that can help with this goal.`;
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a smart contact filter. 
+          
+          Your Goal: Select items from the provided lists that match the user's search intent.
+          
+          Input:
+          - User Query: "${query}"${purposeContext}
+          - Available Companies: ${companiesList}
+          - Available Positions: ${positionsList}
+          
+          Instructions:
+          1. Analyze the User Query to understand the intent (e.g., "tech", "finance", "investors", "founders").
+          2. Select ALL companies from "Available Companies" that fit this intent. Use your world knowledge (e.g., if query is "tech", select "Wayfair", "Google", "Stripe").
+          3. Select ALL positions from "Available Positions" that fit this intent (e.g., if query is "tech", select "Software Engineer", "CTO").
+          4. GENERATE a list of "relevant_keywords" that are synonyms or related terms to the query (e.g., for "tech", include "software", "developer", "engineer", "technology", "saas").
+          5. Return JSON with "selected_companies", "selected_positions", and "relevant_keywords".
+          
+          Example:
+          Query: "tech people"
+          Available Companies: ["Wayfair", "McKinsey", "Stripe", "Starbucks"]
+          Available Positions: ["Software Engineer", "Consultant", "Barista"]
+          Result: {
+            "selected_companies": ["Wayfair", "Stripe"], 
+            "selected_positions": ["Software Engineer"],
+            "relevant_keywords": ["technology", "software", "developer", "engineer", "saas", "startup"]
+          }
+          `
+        },
+        { role: "user", content: "Filter the lists based on my query." }
+      ],
+      response_format: { type: "json_object" },
+    }, { timeout: 8000 }); // Increased to 8s (Vercel limit is usually 10s, but we need to be careful)
+
+    return JSON.parse(completion.choices[0].message.content || '{}');
+  } catch (error: any) {
+    console.error("OpenAI filter error:", error);
+    return { selected_companies: [], selected_positions: [], relevant_keywords: [], error: error.message };
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { userId, query, searchExtended = false } = body
+    const { query, purpose = "any" } = await request.json()
 
-    // Rate limiting
-    const rateLimit = checkRateLimit(`search:${userId}`, RATE_LIMITS.search)
-    if (!rateLimit.allowed) {
-      logSecurityEvent({
-        type: 'rate_limit_exceeded',
-        userId,
-        details: 'Search rate limit exceeded',
-        severity: 'medium'
-      })
+    // 1. Verify Session
+    const supabase = await createClient()
 
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Too many search requests. Please slow down.'
-        },
-        { status: 429 }
-      )
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database connection failed' }, { status: 500 })
     }
 
-    // Validation
-    if (!userId || !query) {
-      return NextResponse.json(
-        { success: false, message: 'userId and query are required' },
-        { status: 400 }
-      )
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!isValidUUID(userId)) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid userId' },
-        { status: 400 }
-      )
-    }
+    const userId = session.user.id
 
-    // Sanitize query
-    const sanitizedQuery = sanitizeSearchQuery(query)
-    if (!sanitizedQuery) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid search query' },
-        { status: 400 }
-      )
-    }
-
-    const supabase = createAdminClient()
-    let allContacts: any[] = []
-
-    // Get user's own contacts
-    const { data: myContacts, error: myError } = await supabase
-      .from('user_contacts')
+    // 2. Fetch User's Own Contacts
+    const adminSupabase = await createAdminClient()
+    const { data: ownContacts, error: dbError } = await adminSupabase
+      .from('contacts')
       .select('*')
       .eq('user_id', userId)
+      .limit(10000)
 
-    if (myError) {
-      console.error('Error fetching contacts:', myError)
-      return NextResponse.json(
-        { success: false, message: 'Failed to search contacts' },
-        { status: 500 }
-      )
+    if (dbError) {
+      console.error("Database error:", dbError)
+      return NextResponse.json({ error: dbError.message }, { status: 500 })
     }
 
-    allContacts = myContacts || []
+    // Add source tag to own contacts
+    const taggedOwnContacts = (ownContacts || []).map((c: any) => ({
+      ...c,
+      source: 'own' as const,
+      owner_name: null
+    }))
 
-    // Search extended network if requested
-    if (searchExtended) {
-      // Get connections where user is requester AND accepter shares their network
-      const { data: asRequester, error: reqError } = await supabase
-        .from('user_connections')
-        .select('connected_user_id, accepter_shares_network')
-        .eq('user_id', userId)
-        .eq('status', 'accepted')
-        .eq('accepter_shares_network', true)
+    // 3. Fetch Shared Contacts from Connected Users
+    let sharedContacts: any[] = []
 
-      // Get connections where user is accepter AND requester shares their network
-      const { data: asAccepter, error: accError } = await supabase
-        .from('user_connections')
-        .select('user_id, requester_shares_network')
-        .eq('connected_user_id', userId)
-        .eq('status', 'accepted')
-        .eq('requester_shares_network', true)
+    // Get connections where user can access shared networks
+    const { data: asRequester } = await adminSupabase
+      .from('user_connections')
+      .select(`
+        connected_user_id,
+        accepter_shares_network,
+       connected_user:users!user_connections_connected_user_id_fkey(full_name)
+      `)
+      .eq('user_id', userId)
+      .eq('status', 'accepted')
+      .eq('accepter_shares_network', true)
 
-      const connectedUserIds = [
-        ...(asRequester || []).map(c => c.connected_user_id),
-        ...(asAccepter || []).map(c => c.user_id)
-      ]
+    const { data: asAccepter } = await adminSupabase
+      .from('user_connections')
+      .select(`
+        user_id,
+        requester_shares_network,
+        requester:users!user_connections_user_id_fkey(full_name)
+      `)
+      .eq('connected_user_id', userId)
+      .eq('status', 'accepted')
+      .eq('requester_shares_network', true)
 
-      if (connectedUserIds.length > 0) {
-        // Get contacts from connected users
-        const { data: extendedContacts } = await supabase
-          .from('user_contacts')
-          .select('*, users!user_contacts_user_id_fkey(full_name, email)')
-          .in('user_id', connectedUserIds)
+    // Collect user IDs who share their network
+    const sharingUserIds: { id: string; name: string }[] = [
+      ...(asRequester || []).map((c: any) => ({
+        id: c.connected_user_id,
+        name: c.connected_user.full_name
+      })),
+      ...(asAccepter || []).map((c: any) => ({
+        id: c.user_id,
+        name: c.requester.full_name
+      }))
+    ]
 
-        if (extendedContacts) {
-          // Mark as extended network contacts
-          const markedExtended = extendedContacts.map(contact => ({
-            ...contact,
-            owner_user_id: contact.user_id,
-            owner_name: (contact.users as any)?.full_name,
-            owner_email: (contact.users as any)?.email,
-            is_extended: true
-          }))
-          allContacts = [...allContacts, ...markedExtended]
-        }
+    // Fetch contacts from all sharing users
+    for (const sharingUser of sharingUserIds) {
+      const { data: userContacts } = await adminSupabase
+        .from('contacts')
+        .select('*')
+        .eq('user_id', sharingUser.id)
+        .limit(5000) // Limit per user to avoid overload
+
+      if (userContacts) {
+        const taggedContacts = userContacts.map((c: any) => ({
+          ...c,
+          source: 'shared' as const,
+          owner_name: sharingUser.name,
+          owner_id: sharingUser.id
+        }))
+        sharedContacts.push(...taggedContacts)
       }
     }
 
-    // Simple search filter (case-insensitive)
-    const queryLower = sanitizedQuery.toLowerCase()
-    const results = allContacts.filter(contact => {
-      const name = (contact.full_name || '').toLowerCase()
-      const company = (contact.company || '').toLowerCase()
-      const position = (contact.position || '').toLowerCase()
-      const email = (contact.email || '').toLowerCase()
+    // Combine all contacts
+    const allContacts = [...taggedOwnContacts, ...sharedContacts]
 
-      return (
-        name.includes(queryLower) ||
-        company.includes(queryLower) ||
-        position.includes(queryLower) ||
-        email.includes(queryLower)
-      )
-    })
+    if (allContacts.length === 0) {
+      return NextResponse.json({ results: [] })
+    }
 
-    // Add match explanations
-    const resultsWithExplanations = results.map(contact => {
-      const queryWords = queryLower.split(' ').filter(w => w.length > 0)
-      const explanations: any = {}
+    // 4. Extract Unique Metadata
+    const uniqueCompanies = Array.from(new Set(allContacts.map((c: any) => c.company).filter(Boolean)));
+    const uniquePositions = Array.from(new Set(allContacts.map((c: any) => c.position).filter(Boolean)));
 
-      queryWords.forEach(word => {
-        if ((contact.company || '').toLowerCase().includes(word)) {
-          explanations.company_match = true
+    // 4. AI Filtering (with fallback)
+    let aiFilter: any = { selected_companies: [], selected_positions: [], relevant_keywords: [] };
+
+    // Only use AI if query is complex enough (more than 2 chars)
+    if (query.length > 2) {
+      aiFilter = await filterWithAI(query, purpose, uniqueCompanies, uniquePositions);
+      console.log("AI Filter Result:", aiFilter);
+    }
+
+    // Fallback: expand generic keywords using CATEGORY_MAP when AI returns empty selections
+    if ((aiFilter.selected_companies?.length ?? 0) === 0 && (aiFilter.selected_positions?.length ?? 0) === 0) {
+      // Ensure the arrays exist before pushing
+      aiFilter.selected_companies = [];
+      aiFilter.selected_positions = [];
+      const lowerKeywords = query.toLowerCase().split(/\s+/);
+      lowerKeywords.forEach((kw: string) => {
+        const map = CATEGORY_MAP[kw];
+        if (map) {
+          if (map.companies) map.companies.forEach((c: string) => aiFilter.selected_companies?.push(c));
+          if (map.positions) map.positions.forEach((p: string) => aiFilter.selected_positions?.push(p));
+          if (map.keywords) map.keywords.forEach((k: string) => aiFilter.relevant_keywords?.push(k));
         }
-        if ((contact.position || '').toLowerCase().includes(word)) {
-          explanations.position_match = true
+      });
+    }
+
+    const selectedCompanies = new Set((aiFilter.selected_companies || []).map((c: string) => c.toLowerCase()));
+    const selectedPositions = new Set((aiFilter.selected_positions || []).map((p: string) => p.toLowerCase()));
+    const relevantKeywords = (aiFilter.relevant_keywords || []).map((k: string) => k.toLowerCase());
+
+    // 5. Apply Filter & Score
+    const queryLower = query.toLowerCase();
+    const queryKeywords = queryLower.split(/\s+/).filter((w: string) => w.length > 2 && !['who', 'works', 'in', 'the', 'and', 'for', 'with'].includes(w));
+
+    const results = allContacts
+      .map((contact: any) => {
+        let score = 0;
+        const company = (contact.company || '').toLowerCase();
+        const position = (contact.position || '').toLowerCase();
+        const searchableText = `${contact.full_name} ${company} ${position} ${contact.email || ''} ${contact.location || ''}`.toLowerCase();
+
+        // High Score: AI Match
+        if (selectedCompanies.has(company)) score += 20; // Boost AI matches significantly
+        if (selectedPositions.has(position)) score += 20;
+
+        // Medium Score: Direct Keyword Match (Fallback)
+        // Check if the query appears as a phrase
+        if (searchableText.includes(queryLower)) score += 10;
+
+        // Check AI-generated synonyms (relevant_keywords)
+        relevantKeywords.forEach((kw: string) => {
+          if (searchableText.includes(kw)) score += 5;
+        });
+
+        // Purpose-based score boost
+        let purposeBoostApplied = false;
+        if (purpose && purpose !== "any" && PURPOSE_BOOST_MAP[purpose]) {
+          const boostMap = PURPOSE_BOOST_MAP[purpose];
+
+          // Check if position matches any purpose keywords
+          const positionMatch = boostMap.positionKeywords.some(kw => position.includes(kw));
+          if (positionMatch) {
+            score += boostMap.scoreBoost;
+            purposeBoostApplied = true;
+          }
+
+          // Check if company matches any purpose keywords
+          const companyMatch = boostMap.companyKeywords.some(kw => company.includes(kw));
+          if (companyMatch) {
+            score += boostMap.scoreBoost;
+            purposeBoostApplied = true;
+          }
         }
-        if ((contact.full_name || '').toLowerCase().includes(word)) {
-          explanations.name_match = true
+
+        // Determine Match Reason
+        let match_reason = "Matched query keywords";
+        if (purposeBoostApplied) {
+          const purposeLabels: Record<string, string> = {
+            raise_funds: "fundraising goals",
+            hire_talent: "hiring needs",
+            find_mentors: "mentorship goals",
+            explore_partnerships: "partnership goals",
+            get_advice: "advisory needs"
+          };
+          match_reason = `Relevant for ${purposeLabels[purpose] || purpose}`;
+        } else if (selectedCompanies.has(company)) {
+          match_reason = `Matches company: ${contact.company}`;
+        } else if (selectedPositions.has(position)) {
+          match_reason = `Matches position: ${contact.position}`;
+        } else {
+          // Check for keyword matches in reason
+          const matchedKw = [...queryKeywords, ...relevantKeywords].find(kw => searchableText.includes(kw));
+          if (matchedKw) {
+            match_reason = `Matches keyword: "${matchedKw}"`;
+          }
         }
+
+        return { contact: { ...contact, match_reason }, score };
       })
-
-      return {
-        ...contact,
-        match_explanations: explanations
-      }
-    })
-
-    // Sort by relevance (prioritize name matches, then position, then company)
-    resultsWithExplanations.sort((a, b) => {
-      const aScore =
-        (a.match_explanations.name_match ? 3 : 0) +
-        (a.match_explanations.position_match ? 2 : 0) +
-        (a.match_explanations.company_match ? 1 : 0)
-
-      const bScore =
-        (b.match_explanations.name_match ? 3 : 0) +
-        (b.match_explanations.position_match ? 2 : 0) +
-        (b.match_explanations.company_match ? 1 : 0)
-
-      return bScore - aScore
-    })
-
-    logSecurityEvent({
-      type: 'search_performed',
-      userId,
-      details: `Search query: "${sanitizedQuery}", Results: ${resultsWithExplanations.length}`,
-      severity: 'low'
-    })
+      .filter((item: any) => item.score > 0)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, 50) // Top 50
+      .map((item: any) => item.contact);
 
     return NextResponse.json({
-      success: true,
-      results: resultsWithExplanations,
-      count: resultsWithExplanations.length,
-      query: sanitizedQuery
+      results,
+      debug: {
+        ...aiFilter,
+        contactCount: allContacts.length,
+        userId: userId,
+        queryKeywords: queryKeywords,
+        sampleContact: allContacts[0] ? { company: allContacts[0].company, position: allContacts[0].position, source: allContacts[0].source } : null
+      }
     })
 
   } catch (error: any) {
     console.error('Search error:', error)
-    logSecurityEvent({
-      type: 'search_error',
-      details: error.message,
-      severity: 'high'
-    })
-
+    console.error('Error stack:', error.stack)
     return NextResponse.json(
-      { success: false, message: 'An error occurred during search' },
+      { error: error.message || 'Internal server error', details: error.toString() },
       { status: 500 }
     )
   }

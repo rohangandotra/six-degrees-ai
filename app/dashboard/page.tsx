@@ -4,11 +4,23 @@ import type React from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, Search, FileText, AlertCircle, Users, Loader2 } from "lucide-react"
+import { Upload, Search, FileText, AlertCircle, Users, Loader2, Info } from "lucide-react"
 import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { ChevronDown } from "lucide-react"
 
 // Proper CSV parser that handles quoted values
 function parseCSV(text: string): string[][] {
@@ -80,6 +92,7 @@ function matchHeader(header: string): string | null {
 export default function DashboardPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<string | null>(null)
+  const [isImportOpen, setIsImportOpen] = useState(true) // Will be set based on contacts
   const [stats, setStats] = useState({
     totalContacts: 0,
     directConnections: 0,
@@ -105,24 +118,22 @@ export default function DashboardPage() {
           return
         }
 
-        // Fetch total contacts
-        const { count: contactsCount } = await supabase
-          .from("contacts")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", user.id)
+        // Fetch stats from new API endpoint with cache busting
+        const response = await fetch(`/api/stats?t=${Date.now()}`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch stats')
+        }
 
-        // Fetch direct connections
-        const { count: connectionsCount } = await supabase
-          .from("connections")
-          .select("*", { count: "exact", head: true })
-          .or(`requester_id.eq.${user.id},accepter_id.eq.${user.id}`)
-          .eq("status", "accepted")
+        const data = await response.json()
 
         setStats({
-          totalContacts: contactsCount || 0,
-          directConnections: connectionsCount || 0,
+          totalContacts: data.totalAccessibleContacts || 0,
+          directConnections: data.directConnections || 0,
           loading: false,
         })
+
+        // Auto-collapse import section if contacts already exist
+        setIsImportOpen((data.ownContacts || 0) === 0)
       } catch (err) {
         console.error("Error fetching stats:", err)
         setStats(prev => ({ ...prev, loading: false }))
@@ -159,93 +170,31 @@ export default function DashboardPage() {
         throw new Error("Not authenticated")
       }
 
-      // Read and parse CSV file
-      const text = await file.text()
-      console.log("CSV file read, size:", text.length)
+      // Upload to backend API (uses intelligent Streamlit logic)
+      const formData = new FormData()
+      formData.append('file', file)
 
-      const rows = parseCSV(text)
-      console.log("Parsed CSV rows:", rows.length)
-
-      if (rows.length < 2) {
-        throw new Error("CSV file is empty or has no data rows")
-      }
-
-      // Parse headers
-      const headerRow = rows[0]
-      const headerMap: { [key: string]: number } = {}
-
-      headerRow.forEach((header, index) => {
-        const field = matchHeader(header)
-        if (field) {
-          headerMap[field] = index
-        }
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const response = await fetch(`${apiUrl}/api/contacts/upload`, {
+        method: 'POST',
+        headers: {
+          'X-User-ID': user.id,
+        },
+        body: formData,
       })
 
-      console.log("Header mapping:", headerMap)
-
-      if (!headerMap.full_name || !headerMap.email) {
-        throw new Error("CSV must contain 'Name' and 'Email' columns")
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || `Upload failed: ${response.statusText}`)
       }
 
-      // Parse data rows
-      const contacts = []
-      const skipped: string[] = []
-
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i]
-
-        const full_name = row[headerMap.full_name]?.trim()
-        const email = row[headerMap.email]?.trim()
-
-        if (!full_name || !email) {
-          skipped.push(`Row ${i + 1}: Missing name or email`)
-          continue
-        }
-
-        const contact: any = {
-          user_id: user.id,
-          full_name,
-          email,
-        }
-
-        if (headerMap.company !== undefined) {
-          contact.company = row[headerMap.company]?.trim() || null
-        }
-        if (headerMap.position !== undefined) {
-          contact.position = row[headerMap.position]?.trim() || null
-        }
-        if (headerMap.phone !== undefined) {
-          contact.phone = row[headerMap.phone]?.trim() || null
-        }
-
-        contacts.push(contact)
-      }
-
-      console.log("Valid contacts to insert:", contacts.length)
-      console.log("Skipped rows:", skipped)
-
-      if (contacts.length === 0) {
-        throw new Error("No valid contacts found in CSV file")
-      }
-
-      // Insert contacts into database
-      console.log("Inserting contacts into database...")
-      const { data: insertedData, error: insertError } = await supabase
-        .from("contacts")
-        .insert(contacts)
-        .select()
-
-      if (insertError) {
-        console.error("Database insert error:", insertError)
-        throw new Error(`Database error: ${insertError.message}`)
-      }
-
-      console.log("Insert successful, rows inserted:", insertedData?.length || contacts.length)
+      const result = await response.json()
+      console.log("Upload successful:", result)
 
       setUploadedFile(file.name)
       toast({
-        title: "File uploaded successfully",
-        description: `${contacts.length} contacts imported${skipped.length > 0 ? `, ${skipped.length} rows skipped` : ''}`,
+        title: "File uploaded successfully!",
+        description: `${result.num_contacts} contacts imported${result.enriched_count > 0 ? ` (${result.enriched_count} enriched from emails)` : ''}`,
       })
 
       // Refresh stats
@@ -280,7 +229,7 @@ export default function DashboardPage() {
     <div className="p-6 space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Dashboard (v2.0)</h1>
         <p className="text-muted-foreground">Welcome back! Manage your professional network.</p>
       </div>
 
@@ -288,7 +237,7 @@ export default function DashboardPage() {
       <div className="grid md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Contacts</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Accessible Contacts</CardTitle>
           </CardHeader>
           <CardContent>
             {stats.loading ? (
@@ -296,7 +245,7 @@ export default function DashboardPage() {
             ) : (
               <>
                 <div className="text-2xl font-bold">{stats.totalContacts}</div>
-                <p className="text-xs text-muted-foreground mt-1">In your network</p>
+                <p className="text-xs text-muted-foreground mt-1">Your network + shared contacts</p>
               </>
             )}
           </CardContent>
@@ -313,9 +262,7 @@ export default function DashboardPage() {
               <>
                 <div className="text-2xl font-bold">{stats.directConnections}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {stats.totalContacts > 0
-                    ? `${Math.round((stats.directConnections / stats.totalContacts) * 100)}% of network`
-                    : "0% of network"}
+                  People you're connected with
                 </p>
               </>
             )}
@@ -344,89 +291,112 @@ export default function DashboardPage() {
       </div>
 
       {/* Upload Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Import Contacts</CardTitle>
-          <CardDescription>Upload a CSV file to import your contacts</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-            <label htmlFor="csv-upload" className="cursor-pointer space-y-2">
-              <div className="flex justify-center">
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  {isUploading ? (
-                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
-                  ) : (
-                    <Upload className="w-6 h-6 text-primary" />
-                  )}
+      <Collapsible open={isImportOpen} onOpenChange={setIsImportOpen}>
+        <Card>
+          <CollapsibleTrigger className="w-full">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="text-left">
+                  <CardTitle className="flex items-center gap-2">
+                    Import Contacts
+                    <ChevronDown className={`w-4 h-4 transition-transform ${isImportOpen ? '' : '-rotate-90'}`} />
+                  </CardTitle>
+                  <CardDescription>Upload a CSV file to import your contacts</CardDescription>
+                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={(e) => e.stopPropagation()}>
+                        <Info className="w-5 h-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-sm p-4">
+                      <div className="space-y-2">
+                        <p className="font-semibold text-sm">How to export your LinkedIn connections:</p>
+                        <ol className="text-xs space-y-1 list-decimal list-inside">
+                          <li>Go to <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">LinkedIn Settings</a></li>
+                          <li>Click "Get a copy of your data"</li>
+                          <li>Select "Connections" only</li>
+                          <li>Click "Request archive"</li>
+                          <li>Wait for email (usually 10 minutes)</li>
+                          <li>Download the ZIP file</li>
+                          <li>Extract and upload the Connections.csv file here</li>
+                        </ol>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4">
+              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
+                <label htmlFor="csv-upload" className="cursor-pointer space-y-2">
+                  <div className="flex justify-center">
+                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                      {isUploading ? (
+                        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                      ) : (
+                        <Upload className="w-6 h-6 text-primary" />
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">
+                      {isUploading ? "Uploading..." : "Click to upload or drag and drop"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">CSV files up to 10MB</p>
+                  </div>
+                  <input
+                    id="csv-upload"
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    disabled={isUploading}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {uploadedFile && (
+                <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                  <FileText className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-green-900 dark:text-green-200">File processed</p>
+                    <p className="text-sm text-green-700 dark:text-green-300">{uploadedFile}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-900 dark:text-blue-200">
+                  <p className="font-medium mb-1">✨ Intelligent CSV Processing</p>
+                  <p>
+                    Upload your LinkedIn connections export or any contact CSV.
+                    We'll automatically detect headers, infer company names from email domains, and handle various formats.
+                  </p>
                 </div>
               </div>
-              <div>
-                <p className="font-medium text-foreground">
-                  {isUploading ? "Uploading..." : "Click to upload or drag and drop"}
-                </p>
-                <p className="text-sm text-muted-foreground">CSV files up to 10MB</p>
-              </div>
-              <input
-                id="csv-upload"
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                disabled={isUploading}
-                className="hidden"
-              />
-            </label>
-          </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
 
-          {uploadedFile && (
-            <div className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
-              <FileText className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-green-900 dark:text-green-200">File processed</p>
-                <p className="text-sm text-green-700 dark:text-green-300">{uploadedFile}</p>
-              </div>
-            </div>
-          )}
 
-          <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
-            <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-900 dark:text-blue-200">
-              <p className="font-medium mb-1">CSV Format Requirements:</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Required columns: <strong>Name</strong> and <strong>Email</strong></li>
-                <li>Optional columns: Company, Job Title, Phone</li>
-                <li>First row must be headers</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      </Collapsible>
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Navigate to different sections of your network</CardDescription>
-        </CardHeader>
-        <CardContent className="grid md:grid-cols-2 gap-3">
-          <Button
-            variant="outline"
-            className="h-12 justify-start gap-3 bg-transparent"
-            onClick={() => router.push("/dashboard/search")}
-          >
-            <Search className="w-5 h-5" />
-            <span>Search Network with AI</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="h-12 justify-start gap-3 bg-transparent"
-            onClick={() => router.push("/dashboard/contacts")}
-          >
-            <Users className="w-5 h-5" />
-            <span>View All Contacts</span>
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+      {/* Debug Section (Required for troubleshooting) */}
+      <Collapsible>
+        <CollapsibleTrigger className="text-xs text-muted-foreground hover:underline">
+          Debug Stats (Click to expand)
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <pre className="mt-2 p-4 bg-muted rounded-md text-xs overflow-auto select-all">
+            {JSON.stringify(stats, null, 2)}
+          </pre>
+        </CollapsibleContent>
+      </Collapsible>
+    </div >
   )
 }

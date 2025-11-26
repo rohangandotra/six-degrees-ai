@@ -36,18 +36,43 @@ export default function ResetPasswordPage() {
         return
       }
 
-      const { data: { session }, error } = await supabase.auth.getSession()
+      // First check if we have an active session
+      const { data: { session: existingSession } } = await supabase.auth.getSession()
 
-      if (error || !session) {
-        toast({
-          title: "Invalid or expired reset link",
-          description: "Please request a new password reset link.",
-          variant: "destructive",
-        })
-        setTimeout(() => router.push("/auth/login"), 2000)
-      } else {
+      if (existingSession) {
         setHasValidSession(true)
+        setIsCheckingAuth(false)
+        return
       }
+
+      // If no session, check for hash fragment (recovery flow)
+      const hash = window.location.hash
+      if (hash && hash.includes('access_token') && hash.includes('type=recovery')) {
+        const params = new URLSearchParams(hash.substring(1))
+        const accessToken = params.get('access_token')
+        const refreshToken = params.get('refresh_token')
+
+        if (accessToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          })
+
+          if (!error) {
+            setHasValidSession(true)
+            setIsCheckingAuth(false)
+            return
+          }
+        }
+      }
+
+      // If we get here, no valid session or recovery token found
+      toast({
+        title: "Invalid or expired reset link",
+        description: "Please request a new password reset link.",
+        variant: "destructive",
+      })
+      setTimeout(() => router.push("/auth/login"), 2000)
       setIsCheckingAuth(false)
     }
 
