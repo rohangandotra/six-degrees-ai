@@ -50,7 +50,10 @@ export async function POST(request: Request) {
     // Generate recovery link using Supabase Auth
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: 'recovery',
-      email: email.toLowerCase()
+      email: email.toLowerCase(),
+      options: {
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://sixthdegree.app'}/auth/reset-password`
+      }
     })
 
     if (linkError) {
