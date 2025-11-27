@@ -161,30 +161,36 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Failed to send request' }, { status: 500 })
         }
 
-        // Send email notification
-        // Fetch recipient email first (we only had ID)
-        const { data: recipient } = await adminSupabase
-            .from('users')
-            .select('email')
-            .eq('id', target_user_id)
-            .single()
-
-        if (recipient?.email) {
-            const { sendEmail, getConnectionRequestTemplate } = await import('@/lib/email')
-            const { data: sender } = await adminSupabase
+        // Send email notification (fire and forget - don't block response)
+        try {
+            // Fetch recipient email first (we only had ID)
+            const { data: recipient } = await adminSupabase
                 .from('users')
-                .select('full_name')
-                .eq('id', userId)
+                .select('email')
+                .eq('id', target_user_id)
                 .single()
 
-            const senderName = sender?.full_name || 'A user'
-            const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://sixthdegree.app'}/dashboard/network`
+            if (recipient?.email) {
+                const { sendEmail, getConnectionRequestTemplate } = await import('@/lib/email')
+                const { data: sender } = await adminSupabase
+                    .from('users')
+                    .select('full_name')
+                    .eq('id', userId)
+                    .single()
 
-            await sendEmail({
-                to: recipient.email,
-                subject: `${senderName} wants to connect on Sixth Degree`,
-                html: getConnectionRequestTemplate(senderName, dashboardUrl)
-            })
+                const senderName = sender?.full_name || 'A user'
+                const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://sixthdegree.app'}/dashboard/network`
+
+                // We don't await this to speed up the response, or we await it but catch errors
+                await sendEmail({
+                    to: recipient.email,
+                    subject: `${senderName} wants to connect on Sixth Degree`,
+                    html: getConnectionRequestTemplate(senderName, dashboardUrl)
+                })
+            }
+        } catch (emailError) {
+            // Log but don't fail the request
+            console.error('Failed to send connection request email:', emailError)
         }
 
         return NextResponse.json({
