@@ -25,6 +25,7 @@ interface Contact {
 
 export default function SearchPage() {
     const [query, setQuery] = useState("")
+    const [purpose, setPurpose] = useState("any")
     const [scope, setScope] = useState<"own" | "extended">("extended")
     const [results, setResults] = useState<Contact[]>([])
     const [isLoading, setIsLoading] = useState(false)
