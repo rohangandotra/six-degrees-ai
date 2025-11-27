@@ -39,51 +39,53 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if user has completed onboarding
-    const { data: { user } } = await supabase.auth.getUser()
+    if (supabase) {
+      const { data: { user } } = await supabase.auth.getUser()
 
-    if (user) {
-      // SELF-HEALING: Ensure user exists in public.users
-      // This handles cases where the DB trigger failed (e.g. due to password_hash constraint)
-      try {
-        const { createClient: createAdminClient } = await import('@supabase/supabase-js')
-        const adminSupabase = createAdminClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
+      if (user) {
+        // SELF-HEALING: Ensure user exists in public.users
+        // This handles cases where the DB trigger failed (e.g. due to password_hash constraint)
+        try {
+          const { createClient: createAdminClient } = await import('@supabase/supabase-js')
+          const adminSupabase = createAdminClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+          )
 
-        const { data: existingUser } = await adminSupabase
-          .from('users')
-          .select('id')
-          .eq('id', user.id)
-          .single()
-
-        if (!existingUser) {
-          console.log('[Auth Callback] User missing in public.users, syncing now:', user.id)
-          const { error: syncError } = await adminSupabase
+          const { data: existingUser } = await adminSupabase
             .from('users')
-            .insert({
-              id: user.id,
-              email: user.email,
-              full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
-              password_hash: 'managed_by_supabase_auth' // Dummy value to satisfy legacy constraint
-            })
+            .select('id')
+            .eq('id', user.id)
+            .single()
 
-          if (syncError) {
-            console.error('[Auth Callback] Failed to sync user:', syncError)
-          } else {
-            console.log('[Auth Callback] User synced successfully')
+          if (!existingUser) {
+            console.log('[Auth Callback] User missing in public.users, syncing now:', user.id)
+            const { error: syncError } = await adminSupabase
+              .from('users')
+              .insert({
+                id: user.id,
+                email: user.email,
+                full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
+                password_hash: 'managed_by_supabase_auth' // Dummy value to satisfy legacy constraint
+              })
+
+            if (syncError) {
+              console.error('[Auth Callback] Failed to sync user:', syncError)
+            } else {
+              console.log('[Auth Callback] User synced successfully')
+            }
           }
+        } catch (err) {
+          console.error('[Auth Callback] Error in self-healing:', err)
         }
-      } catch (err) {
-        console.error('[Auth Callback] Error in self-healing:', err)
-      }
 
-      const profileResponse = await fetch(`${requestUrl.origin}/api/profile?userId=${user.id}`)
-      const profileData = await profileResponse.json()
+        const profileResponse = await fetch(`${requestUrl.origin}/api/profile?userId=${user.id}`)
+        const profileData = await profileResponse.json()
 
-      // If no profile or profile not completed, redirect to onboarding
-      if (!profileData.success || !profileData.profile || !profileData.profile.profile_completed) {
-        return NextResponse.redirect(`${requestUrl.origin}/onboarding`)
+        // If no profile or profile not completed, redirect to onboarding
+        if (!profileData.success || !profileData.profile || !profileData.profile.profile_completed) {
+          return NextResponse.redirect(`${requestUrl.origin}/onboarding`)
+        }
       }
     }
 
