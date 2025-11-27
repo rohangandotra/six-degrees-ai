@@ -128,6 +128,30 @@ export async function POST(request: Request) {
         const userId = session.user.id
         const adminSupabase = await createAdminClient()
 
+        // JIT: Ensure requester exists in public.users to prevent FK violation
+        const { data: requesterExists } = await adminSupabase
+            .from('users')
+            .select('id')
+            .eq('id', userId)
+            .single()
+
+        if (!requesterExists) {
+            console.log('[Connection API] Requester missing in public.users, syncing now:', userId)
+            const { error: syncError } = await adminSupabase
+                .from('users')
+                .insert({
+                    id: userId,
+                    email: session.user.email,
+                    full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+                    password_hash: 'managed_by_supabase_auth' // Dummy value
+                })
+
+            if (syncError) {
+                console.error('[Connection API] Failed to sync requester:', syncError)
+                // We continue anyway, hoping it might work or fail with a clear error
+            }
+        }
+
         // Check if connection already exists
         const { data: existing } = await adminSupabase
             .from('user_connections')
