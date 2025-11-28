@@ -120,20 +120,20 @@ export default function SearchPage() {
                             </Select>
                         </div>
 
-                        <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg">
+                        <div className="flex items-center gap-2 bg-muted p-1 rounded-lg">
                             <Button
-                                variant={scope === 'own' ? 'secondary' : 'ghost'}
+                                variant={scope === 'own' ? 'default' : 'ghost'}
                                 size="sm"
                                 onClick={() => setScope('own')}
-                                className="text-xs h-8"
+                                className={`text-xs h-8 px-4 transition-all ${scope === 'own' ? 'shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 My Network
                             </Button>
                             <Button
-                                variant={scope === 'extended' ? 'secondary' : 'ghost'}
+                                variant={scope === 'extended' ? 'default' : 'ghost'}
                                 size="sm"
                                 onClick={() => setScope('extended')}
-                                className="text-xs h-8"
+                                className={`text-xs h-8 px-4 transition-all ${scope === 'extended' ? 'shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                             >
                                 Extended Network
                             </Button>
