@@ -17,14 +17,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function scrapeConnections() {
     console.log("Starting scrape...");
 
-    // Auto-scroll to load more contacts (Basic implementation)
-    // In a real robust version, we'd scroll until the end or a limit
-    // For now, let's just scrape what's visible + a little scrolling
+    // Helper to sleep
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Scroll to bottom to load all contacts
+    let previousHeight = 0;
+    let currentHeight = document.body.scrollHeight;
+    let attempts = 0;
+    const maxAttempts = 5; // Stop if height doesn't change after 5 tries
+
+    while (attempts < maxAttempts) {
+        window.scrollTo(0, document.body.scrollHeight);
+        await sleep(2000); // Wait for lazy load
+
+        currentHeight = document.body.scrollHeight;
+        if (currentHeight === previousHeight) {
+            attempts++;
+        } else {
+            previousHeight = currentHeight;
+            attempts = 0; // Reset attempts if we found more content
+        }
+        console.log(`Scrolling... Height: ${currentHeight}, Attempts: ${attempts}`);
+    }
+
+    console.log("Finished scrolling. Parsing cards...");
 
     const contacts = [];
     const cards = document.querySelectorAll('.mn-connection-card');
 
-    console.log(`Found ${cards.length} cards initially.`);
+    console.log(`Found ${cards.length} cards.`);
 
     cards.forEach(card => {
         try {
@@ -32,7 +53,7 @@ async function scrapeConnections() {
             const headlineElement = card.querySelector('.mn-connection-card__occupation');
             const linkElement = card.querySelector('.mn-connection-card__link');
             const timeElement = card.querySelector('time');
-            const imgElement = card.querySelector('.mn-connection-card__picture'); // Often an img or div with bg image
+            const imgElement = card.querySelector('.mn-connection-card__picture');
 
             if (nameElement && linkElement) {
                 const name = nameElement.innerText.trim();
@@ -40,7 +61,6 @@ async function scrapeConnections() {
                 const profileUrl = linkElement.href;
                 const connectedAt = timeElement ? timeElement.innerText.trim() : '';
 
-                // Basic image extraction (LinkedIn uses lazy loading, so this might be a placeholder)
                 let avatarUrl = '';
                 if (imgElement) {
                     const img = imgElement.querySelector('img');

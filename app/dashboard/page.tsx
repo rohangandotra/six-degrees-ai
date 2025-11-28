@@ -329,7 +329,7 @@ export default function DashboardPage() {
                       <div className="space-y-2">
                         <p className="font-semibold text-sm">How to export your LinkedIn connections:</p>
                         <ol className="text-xs space-y-1 list-decimal list-inside">
-                          <li>Go to <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">LinkedIn Settings</a></li>
+                          <li>Go to <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">LinkedIn Settings</a></li>
                           <li>Click "Get a copy of your data"</li>
                           <li>Select "Connections" only</li>
                           <li>Click "Request archive"</li>
