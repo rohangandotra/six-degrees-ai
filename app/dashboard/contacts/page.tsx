@@ -6,6 +6,12 @@ import { Badge } from "@/components/ui/badge"
 import { Search, MoreVertical, Mail, Phone, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface Contact {
   id: string
@@ -171,9 +177,21 @@ export default function ContactsPage() {
                         <Mail className="w-4 h-4 text-muted-foreground" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => console.log("Edit", contact.id)}>
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-red-600" onClick={() => console.log("Delete", contact.id)}>
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               ))}
