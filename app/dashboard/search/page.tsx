@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Loader2, ArrowLeft, Mail, Building, Briefcase } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import { getApiUrl } from "@/lib/api-config"
 
 interface Contact {
     id: string
@@ -42,7 +43,7 @@ export default function SearchPage() {
         setResults([])
 
         try {
-            const response = await fetch("/api/search", {
+            const response = await fetch(getApiUrl("/api/search"), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

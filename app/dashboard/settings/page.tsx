@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { Save, LogOut } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 export default function SettingsPage() {
@@ -17,7 +17,23 @@ export default function SettingsPage() {
   const [jobTitle, setJobTitle] = useState("Product Manager")
   const [isSaving, setIsSaving] = useState(false)
   const { toast } = useToast()
+  const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { createClient } = await import("@/lib/supabase/client")
+      const supabase = createClient()
+      if (!supabase) return
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUserId(user.id)
+        // Pre-fill email if not set
+        if (email === "john.doe@example.com") setEmail(user.email || "")
+      }
+    }
+    fetchUser()
+  }, [])
 
   const handleSave = () => {
     setIsSaving(true)
@@ -80,6 +96,34 @@ export default function SettingsPage() {
             <Save className="w-4 h-4" />
             {isSaving ? "Saving..." : "Save Changes"}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Integrations */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Integrations</CardTitle>
+          <CardDescription>Connect external tools to Sixth Degree</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>LinkedIn Sync Key</Label>
+            <div className="flex gap-2">
+              <Input value={userId || "Loading..."} readOnly className="font-mono bg-muted" />
+              <Button
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(userId || "")
+                  toast({ title: "Copied to clipboard" })
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Paste this key into the Sixth Degree Chrome Extension to sync your connections.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

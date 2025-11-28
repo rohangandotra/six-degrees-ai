@@ -24,6 +24,7 @@ import {
     CONNECTION_TYPE_OPTIONS
 } from "@/lib/constants/profile-options"
 import { createClient } from "@/lib/supabase/client"
+import { getApiUrl } from "@/lib/api-config"
 
 export default function OnboardingPage() {
     const router = useRouter()
@@ -104,13 +105,18 @@ export default function OnboardingPage() {
 
         try {
             const supabase = createClient()
+
+            if (!supabase) {
+                throw new Error("Failed to initialize Supabase client")
+            }
+
             const { data: { user } } = await supabase.auth.getUser()
 
             if (!user) {
                 throw new Error("Not authenticated")
             }
 
-            const response = await fetch("/api/profile", {
+            const response = await fetch(getApiUrl("/api/profile"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

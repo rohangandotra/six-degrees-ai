@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sixth Degree Sync</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="icons/icon48.png" alt="Logo" class="logo">
+      <h1>Sixth Degree</h1>
+    </div>
+    
+    <div class="content">
+      <div id="setup-section">
+        <label for="apiKey">Sync Key</label>
+        <input type="password" id="apiKey" placeholder="Paste your Sync Key here">
+        <p class="help-text">Get this from your Sixth Degree Dashboard Settings.</p>
+        <button id="saveKeyBtn">Save Key</button>
+      </div>
+
+      <div id="sync-section" class="hidden">
+        <div class="status-card">
+          <p id="statusText">Ready to sync.</p>
+        </div>
+        <button id="syncBtn" class="primary-btn">Sync Connections</button>
+        <button id="resetKeyBtn" class="secondary-btn">Change Key</button>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Navigate to <a href="https://www.linkedin.com/mynetwork/invite-connect/connections/" target="_blank">LinkedIn Connections</a> to start.</p>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

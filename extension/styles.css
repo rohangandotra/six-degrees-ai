@@ -1,0 +1,131 @@
+body {
+  width: 300px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f9fafb;
+}
+
+.container {
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.logo {
+  width: 32px;
+  height: 32px;
+  margin-right: 10px;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.hidden {
+  display: none;
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  box-sizing: border-box; /* Important for padding */
+  margin-bottom: 8px;
+}
+
+input:focus {
+  outline: none;
+  border-color: #2563eb;
+  ring: 2px solid #2563eb;
+}
+
+.help-text {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+button {
+  width: 100%;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border: none;
+}
+
+.primary-btn, #saveKeyBtn {
+  background-color: #2563eb;
+  color: white;
+}
+
+.primary-btn:hover, #saveKeyBtn:hover {
+  background-color: #1d4ed8;
+}
+
+.primary-btn:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  background-color: transparent;
+  color: #6b7280;
+  margin-top: 8px;
+}
+
+.secondary-btn:hover {
+  text-decoration: underline;
+}
+
+.status-card {
+  background-color: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+#statusText {
+  margin: 0;
+  font-size: 14px;
+  color: #374151;
+}
+
+.footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}

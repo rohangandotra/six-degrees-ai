@@ -73,6 +73,19 @@ export async function GET(request: NextRequest) {
               console.error('[Auth Callback] Failed to sync user:', syncError)
             } else {
               console.log('[Auth Callback] User synced successfully')
+
+              // Notify Admin
+              try {
+                const { sendEmail, getNewUserSignupTemplate } = await import('@/lib/email')
+                await sendEmail({
+                  to: 'rohan.gandotra19@gmail.com',
+                  subject: '🚀 New User Signup: ' + (user.email || 'Unknown'),
+                  html: getNewUserSignupTemplate(user.email || 'Unknown', user.user_metadata?.full_name || 'Unknown')
+                })
+                console.log('[Auth Callback] Admin notification sent')
+              } catch (emailErr) {
+                console.error('[Auth Callback] Failed to send admin notification:', emailErr)
+              }
             }
           }
         } catch (err) {

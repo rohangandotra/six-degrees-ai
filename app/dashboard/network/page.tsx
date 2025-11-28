@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Users, Search, Loader2, Mail, Check, X, UserPlus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getApiUrl } from "@/lib/api-config"
 
 interface Connection {
   connection_id: string
@@ -53,7 +54,7 @@ export default function NetworkPage() {
 
   const fetchConnections = async () => {
     try {
-      const response = await fetch('/api/connections')
+      const response = await fetch(getApiUrl('/api/connections'))
       if (response.ok) {
         const data = await response.json()
         setConnections(data.connections || [])
@@ -65,7 +66,7 @@ export default function NetworkPage() {
 
   const fetchPendingRequests = async () => {
     try {
-      const response = await fetch('/api/connections/pending')
+      const response = await fetch(getApiUrl('/api/connections/pending'))
       if (response.ok) {
         const data = await response.json()
         setPendingRequests(data.requests || [])
@@ -88,7 +89,7 @@ export default function NetworkPage() {
 
     setIsSearching(true)
     try {
-      const response = await fetch('/api/users/search', {
+      const response = await fetch(getApiUrl('/api/users/search'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery })
@@ -114,7 +115,7 @@ export default function NetworkPage() {
   const sendConnectionRequest = async (targetUserId: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/connections', {
+      const response = await fetch(getApiUrl('/api/connections'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_user_id: targetUserId })
@@ -145,7 +146,7 @@ export default function NetworkPage() {
   const handleRequest = async (connectionId: string, action: 'accept' | 'decline', shareNetwork: boolean = true) => {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/connections/pending', {
+      const response = await fetch(getApiUrl('/api/connections/pending'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connection_id: connectionId, action, share_network: shareNetwork })
@@ -176,7 +177,7 @@ export default function NetworkPage() {
 
   const toggleSharing = async (connectionId: string, role: 'requester' | 'accepter', currentValue: boolean) => {
     try {
-      const response = await fetch(`/api/connections/${connectionId}`, {
+      const response = await fetch(getApiUrl(`/api/connections/${connectionId}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ share_network: !currentValue })

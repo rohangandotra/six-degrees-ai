@@ -9,6 +9,8 @@ import Link from "next/link"
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 
+import { getApiUrl } from "@/lib/api-config"
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -20,7 +22,7 @@ export default function ForgotPasswordPage() {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      const response = await fetch(getApiUrl('/api/auth/forgot-password'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

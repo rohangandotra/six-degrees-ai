@@ -3,6 +3,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // output: 'export', // Uncomment for mobile build
   images: {
     unoptimized: true,
   },

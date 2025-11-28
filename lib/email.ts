@@ -58,3 +58,18 @@ export function getConnectionRequestTemplate(requesterName: string, acceptUrl: s
     </div>
   `;
 }
+
+export function getNewUserSignupTemplate(userEmail: string, userName: string) {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>New User Signup! 🚀</h2>
+      <p>A new user has just joined Sixth Degree:</p>
+      <ul>
+        <li><strong>Name:</strong> ${userName}</li>
+        <li><strong>Email:</strong> ${userEmail}</li>
+        <li><strong>Time:</strong> ${new Date().toLocaleString()}</li>
+      </ul>
+      <p>Great job growing the network!</p>
+    </div>
+  `;
+}

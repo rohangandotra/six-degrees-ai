@@ -9,6 +9,10 @@
     "start": "next start"
   },
   "dependencies": {
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/cli": "^7.4.4",
+    "@capacitor/core": "^7.4.4",
+    "@capacitor/ios": "^7.4.4",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
@@ -56,6 +60,8 @@
     "next-themes": "^0.4.6",
     "openai": "^6.9.1",
     "papaparse": "^5.5.3",
+    "pg": "^8.16.3",
+    "posthog-js": "^1.298.1",
     "react": "19.2.0",
     "react-day-picker": "9.8.0",
     "react-dom": "19.2.0",
