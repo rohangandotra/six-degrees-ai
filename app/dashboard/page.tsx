@@ -205,7 +205,11 @@ export default function DashboardPage() {
               'email': 'email',
               'connected on': 'connected_on',
               'url': 'linkedin_url',
-              'profile url': 'linkedin_url'
+              'profile url': 'linkedin_url',
+              'public profile url': 'linkedin_url',
+              'linkedin profile': 'linkedin_url',
+              'profile link': 'linkedin_url',
+              'linkedin': 'linkedin_url'
             }
 
             // Transform to Objects
