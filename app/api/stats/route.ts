@@ -93,23 +93,34 @@ export async function GET(request: Request) {
         }
 
         const uniqueContacts = new Set<string>()
+        let unidentifiableCount = 0
 
         allContacts?.forEach(contact => {
-            if (contact.linkedin_url) {
+            const hasUrl = contact.linkedin_url && contact.linkedin_url.trim() !== ''
+            const hasEmail = contact.email && contact.email.trim() !== ''
+
+            if (hasUrl) {
                 uniqueContacts.add(`li:${contact.linkedin_url}`)
-            } else if (contact.email) {
+            } else if (hasEmail) {
                 uniqueContacts.add(`email:${contact.email.toLowerCase()}`)
+            } else {
+                unidentifiableCount++
             }
         })
 
-        const totalAccessibleContacts = uniqueContacts.size
+        const totalAccessibleContacts = uniqueContacts.size + unidentifiableCount
+
+        // Shared is Total - Own (Approximation, since we can't easily know which unidentifiables are own vs shared without more logic)
+        // A better approximation for shared: Total - Own. If negative (shouldn't be), 0.
         const sharedContactsCount = Math.max(0, totalAccessibleContacts - (ownContactsCount || 0))
+
+        console.log(`[Stats API] Unique: ${uniqueContacts.size}, Unidentifiable: ${unidentifiableCount}, Total: ${totalAccessibleContacts}`)
 
         return NextResponse.json({
             userId: userId,
             ownContacts: ownContactsCount || 0,
             directConnections: directConnectionsCount,
-            sharedContacts: sharedContactsCount, // Approximate (Total Unique - Own)
+            sharedContacts: sharedContactsCount,
             totalAccessibleContacts: totalAccessibleContacts
         })
 
