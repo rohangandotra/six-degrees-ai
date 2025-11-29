@@ -263,7 +263,7 @@ export default function DashboardPage() {
             const { count } = await supabase.from("contacts").select("*", { count: "exact", head: true }).eq("user_id", user.id)
             setStats(prev => ({ ...prev, totalContacts: count || 0 }))
 
-            setTimeout(() => router.reload(), 1000)
+            setTimeout(() => window.location.reload(), 1000)
 
           } catch (err: any) {
             console.error("Processing error:", err)
