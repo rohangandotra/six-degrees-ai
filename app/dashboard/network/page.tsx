@@ -20,6 +20,7 @@ interface Connection {
   i_share_network: boolean
   connected_at: string
   role: 'requester' | 'accepter'
+  contact_count: number
 }
 
 interface PendingRequest {
@@ -242,9 +243,14 @@ export default function NetworkPage() {
                       <CardDescription>{conn.email}</CardDescription>
                     </div>
                     <div className="flex flex-col gap-2 items-end">
-                      <Badge variant={conn.network_sharing_enabled ? "default" : "secondary"}>
-                        {conn.network_sharing_enabled ? "Sharing with you" : "Not sharing"}
-                      </Badge>
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {conn.contact_count} contacts
+                        </Badge>
+                        <Badge variant={conn.network_sharing_enabled ? "default" : "secondary"}>
+                          {conn.network_sharing_enabled ? "Sharing with you" : "Not sharing"}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>

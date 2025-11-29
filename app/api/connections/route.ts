@@ -69,6 +69,24 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Failed to fetch connections' }, { status: 500 })
         }
 
+        // Fetch contact counts for all connected users
+        const targetUserIds = [
+            ...(asRequester || []).map((c: any) => c.connected_user_id),
+            ...(asAccepter || []).map((c: any) => c.user_id)
+        ]
+
+        const countsMap: Record<string, number> = {}
+
+        if (targetUserIds.length > 0) {
+            await Promise.all(targetUserIds.map(async (id) => {
+                const { count } = await adminSupabase
+                    .from('contacts')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('user_id', id)
+                countsMap[id] = count || 0
+            }))
+        }
+
         // Format connections
         const connections = [
             ...(asRequester || []).map((conn: any) => ({
@@ -79,7 +97,8 @@ export async function GET(request: Request) {
                 network_sharing_enabled: conn.accepter_shares_network, // Does OTHER user share?
                 i_share_network: conn.requester_shares_network, // Do I share?
                 connected_at: conn.accepted_at || conn.created_at,
-                role: 'requester' as const
+                role: 'requester' as const,
+                contact_count: countsMap[conn.connected_user_id] || 0
             })),
             ...(asAccepter || []).map((conn: any) => ({
                 connection_id: conn.id,
@@ -89,7 +108,8 @@ export async function GET(request: Request) {
                 network_sharing_enabled: conn.requester_shares_network, // Does OTHER user share?
                 i_share_network: conn.accepter_shares_network, // Do I share?
                 connected_at: conn.accepted_at || conn.created_at,
-                role: 'accepter' as const
+                role: 'accepter' as const,
+                contact_count: countsMap[conn.user_id] || 0
             }))
         ]
 
