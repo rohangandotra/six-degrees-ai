@@ -174,8 +174,7 @@ export default function DashboardPage() {
       const formData = new FormData()
       formData.append('file', file)
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
-      const response = await fetch(`${apiUrl}/api/contacts/upload`, {
+      const response = await fetch('/api/contacts/upload', {
         method: 'POST',
         headers: {
           'X-User-ID': user.id,

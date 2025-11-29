@@ -142,7 +142,10 @@ export async function POST(request: Request) {
 
     const { error: insertError } = await supabase
       .from('contacts')
-      .insert(contactsToInsert)
+      .upsert(contactsToInsert, {
+        onConflict: 'user_id, linkedin_url',
+        ignoreDuplicates: false
+      })
 
     if (insertError) {
       console.error('Database Insert Error:', insertError)
