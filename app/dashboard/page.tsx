@@ -100,6 +100,12 @@ export default function DashboardPage() {
   })
   const { toast } = useToast()
   const router = useRouter()
+  const [debugLogs, setDebugLogs] = useState<string[]>([])
+
+  const addLog = (msg: string) => {
+    setDebugLogs(prev => [...prev, `${new Date().toISOString().split('T')[1].slice(0, 8)}: ${msg}`])
+    console.log(msg)
+  }
 
   useEffect(() => {
     async function fetchStats() {
@@ -147,6 +153,9 @@ export default function DashboardPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
+    setDebugLogs([]) // Clear previous logs
+    addLog(`Selected file: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`)
+
     // Validate CSV file
     if (!file.name.endsWith(".csv")) {
       toast({
@@ -154,72 +163,170 @@ export default function DashboardPage() {
         description: "Please upload a CSV file",
         variant: "destructive",
       })
+      addLog("Error: Invalid file extension")
       return
     }
 
     setIsUploading(true)
+    setUploadedFile(file.name)
 
     try {
+      addLog("Initializing Supabase client...")
       const supabase = createClient()
-      if (!supabase) {
-        throw new Error("Unable to connect to database")
-      }
+      if (!supabase) throw new Error("Unable to connect to database")
 
+      addLog("Checking authentication...")
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        throw new Error("Not authenticated")
-      }
+      if (!user) throw new Error("Not authenticated")
+      addLog(`Authenticated as user: ${user.id}`)
 
-      // Upload to backend API (uses intelligent Streamlit logic)
-      const formData = new FormData()
-      formData.append('file', file)
+      // 1. Parse CSV Client-Side
+      addLog("Importing PapaParse...")
+      const { default: Papa } = await import('papaparse')
 
-      const response = await fetch('/api/contacts/upload', {
-        method: 'POST',
-        headers: {
-          'X-User-ID': user.id,
+      addLog("Starting CSV parse...")
+      Papa.parse(file, {
+        header: false, // We'll detect headers manually to be safe
+        skipEmptyLines: true,
+        complete: async (results) => {
+          try {
+            addLog(`Parse complete. Rows: ${results.data.length}`)
+            const allRows = results.data as string[][]
+            if (allRows.length < 2) throw new Error("CSV file is empty")
+
+            // Header Detection
+            let headerRowIndex = 0
+            const linkedinIndicators = ['first name', 'last name', 'company', 'position', 'email']
+
+            for (let i = 0; i < Math.min(20, allRows.length); i++) {
+              const rowString = allRows[i].join(' ').toLowerCase()
+              const matches = linkedinIndicators.filter(ind => rowString.includes(ind)).length
+              if (matches >= 2) {
+                headerRowIndex = i
+                break
+              }
+            }
+            addLog(`Header row detected at index: ${headerRowIndex}`)
+
+            const headers = allRows[headerRowIndex].map(h => h.trim().toLowerCase())
+            addLog(`Headers: ${headers.join(', ')}`)
+            const dataRows = allRows.slice(headerRowIndex + 1)
+
+            // Column Mapping
+            const columnMapping: Record<string, string> = {
+              'first name': 'first_name',
+              'last name': 'last_name',
+              'company': 'company',
+              'position': 'position',
+              'title': 'position',
+              'email address': 'email',
+              'email': 'email',
+              'connected on': 'connected_on',
+              'url': 'linkedin_url',
+              'profile url': 'linkedin_url'
+            }
+
+            // Transform to Objects
+            const contacts = dataRows.map(row => {
+              const contact: any = { user_id: user.id }
+              headers.forEach((header, index) => {
+                const mappedKey = columnMapping[header] || header
+                if (['first_name', 'last_name', 'company', 'position', 'email', 'connected_on', 'linkedin_url'].includes(mappedKey)) {
+                  contact[mappedKey] = row[index]?.trim() || null
+                }
+              })
+
+              // Construct full_name
+              if (contact.first_name && contact.last_name) {
+                contact.full_name = `${contact.first_name} ${contact.last_name}`.trim()
+              } else if (contact.first_name) {
+                contact.full_name = contact.first_name
+              }
+
+              return contact
+            }).filter(c => c.full_name)
+
+            addLog(`Transformed ${contacts.length} valid contacts`)
+
+            if (contacts.length === 0) throw new Error("No valid contacts found")
+
+            // 2. Batch Upload
+            const BATCH_SIZE = 100
+            let processed = 0
+
+            addLog(`Starting batch upload (Batch Size: ${BATCH_SIZE})...`)
+
+            for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+              const batch = contacts.slice(i, i + BATCH_SIZE)
+              addLog(`Uploading batch ${i / BATCH_SIZE + 1} (${batch.length} contacts)...`)
+
+              const response = await fetch('/api/contacts/upload', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-User-ID': user.id,
+                },
+                body: JSON.stringify({ contacts: batch }),
+              })
+
+              if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                const errorMsg = `Batch ${i / BATCH_SIZE + 1} failed: ${response.status} - ${errorData.message || response.statusText}`
+                addLog(`❌ ${errorMsg}`)
+                throw new Error(errorMsg)
+              }
+
+              const result = await response.json()
+              addLog(`✅ Batch ${i / BATCH_SIZE + 1} success: ${result.message}`)
+
+              processed += batch.length
+              // Optional: Update UI with progress if we had a progress bar
+            }
+
+            addLog("All batches completed successfully.")
+            toast({
+              title: "Upload successful!",
+              description: `Imported ${processed} contacts successfully.`,
+            })
+
+            // Refresh stats
+            const { count } = await supabase.from("contacts").select("*", { count: "exact", head: true }).eq("user_id", user.id)
+            setStats(prev => ({ ...prev, totalContacts: count || 0 }))
+
+            setTimeout(() => router.refresh(), 1000)
+
+          } catch (err: any) {
+            console.error("Processing error:", err)
+            addLog(`❌ Processing Error: ${err.message}`)
+            toast({
+              title: "Import failed",
+              description: err.message,
+              variant: "destructive",
+            })
+          } finally {
+            setIsUploading(false)
+          }
         },
-        body: formData,
+        error: (err) => {
+          console.error("CSV Parse Error:", err)
+          addLog(`❌ CSV Parse Error: ${err.message}`)
+          toast({
+            title: "CSV Parse Error",
+            description: err.message,
+            variant: "destructive",
+          })
+          setIsUploading(false)
+        }
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || `Upload failed: ${response.statusText}`)
-      }
-
-      const result = await response.json()
-      console.log("Upload successful:", result)
-
-      setUploadedFile(file.name)
-      toast({
-        title: "File uploaded successfully!",
-        description: `${result.num_contacts} contacts imported${result.enriched_count > 0 ? ` (${result.enriched_count} enriched from emails)` : ''}`,
-      })
-
-      // Refresh stats
-      const { count: contactsCount } = await supabase
-        .from("contacts")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-
-      setStats(prev => ({
-        ...prev,
-        totalContacts: contactsCount || 0,
-      }))
-
-      // Refresh the page to show new contacts
-      setTimeout(() => {
-        router.refresh()
-      }, 1000)
 
     } catch (err: any) {
-      console.error("Upload error:", err)
+      console.error("Upload setup error:", err)
+      addLog(`❌ Setup Error: ${err.message}`)
       toast({
         title: "Upload failed",
-        description: err.message || "Failed to upload contacts",
+        description: err.message,
         variant: "destructive",
       })
-    } finally {
       setIsUploading(false)
     }
   }
@@ -380,6 +487,15 @@ export default function DashboardPage() {
                     <p className="font-medium text-green-900 dark:text-green-200">File processed</p>
                     <p className="text-sm text-green-700 dark:text-green-300">{uploadedFile}</p>
                   </div>
+                </div>
+              )}
+
+              {debugLogs.length > 0 && (
+                <div className="mt-4 p-4 bg-slate-950 text-slate-50 rounded-lg font-mono text-xs overflow-y-auto max-h-60">
+                  <p className="font-bold mb-2 text-yellow-400">Debug Logs:</p>
+                  {debugLogs.map((log, i) => (
+                    <div key={i} className="whitespace-pre-wrap">{log}</div>
+                  ))}
                 </div>
               )}
 

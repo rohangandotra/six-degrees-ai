@@ -1,20 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import Papa from 'papaparse'
 import { DOMAIN_TO_COMPANY } from '@/lib/constants/company-domains'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData()
-    const file = formData.get('file') as File
-
-    if (!file) {
-      return NextResponse.json(
-        { success: false, message: 'File is required' },
-        { status: 400 }
-      )
-    }
-
     // 1. Verify Session
     const supabase = await createClient()
 
@@ -36,87 +26,40 @@ export async function POST(request: Request) {
 
     const userId = user.id
 
-    // 2. Read File Content
-    const fileContent = await file.text()
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY")
+    }
 
-    // 3. Parse CSV (Intelligent Header Detection)
-    // First, parse without headers to find the header row
-    const initialParse = Papa.parse(fileContent, {
-      header: false,
-      skipEmptyLines: true,
-      preview: 20 // Check first 20 lines
-    })
+    // 2. Create Admin Client (Bypass RLS)
+    const adminSupabase = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
 
-    let headerRowIndex = 0
-    const linkedinIndicators = ['first name', 'last name', 'company', 'position', 'email']
+    // 2. Parse Request Body (JSON)
+    const body = await request.json()
+    let contactsToInsert = body.contacts
 
-    // Find the row that looks like headers
-    for (let i = 0; i < initialParse.data.length; i++) {
-      const row = initialParse.data[i] as string[]
-      const rowString = row.join(' ').toLowerCase()
-      const matches = linkedinIndicators.filter(indicator => rowString.includes(indicator)).length
+    if (!contactsToInsert || !Array.isArray(contactsToInsert)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid payload: contacts array required' },
+        { status: 400 }
+      )
+    }
 
-      if (matches >= 2) {
-        headerRowIndex = i
-        break
+    // Add user_id to each contact and ensure full_name is constructed
+    contactsToInsert = contactsToInsert.map((contact: any) => {
+      const newContact = { ...contact, user_id: userId };
+      if (!newContact.full_name && newContact.first_name && newContact.last_name) {
+        newContact.full_name = `${newContact.first_name} ${newContact.last_name}`.trim();
+      } else if (!newContact.full_name && newContact.first_name) {
+        newContact.full_name = newContact.first_name;
       }
-    }
+      return newContact;
+    }).filter((c: any) => c.full_name); // Filter out empty rows based on full_name
 
-    // Re-parse with correct header row
-    // We need to slice the content string to start from the header row if it's not 0
-    // But PapaParse doesn't support 'skipRows' easily with string input in the same way as stream
-    // So we'll just parse everything and slice the array if needed, or use the 'transform' config?
-    // Actually, simpler: just parse everything with headers: false, then slice the array and map manually.
-
-    const fullParse = Papa.parse(fileContent, {
-      header: false,
-      skipEmptyLines: true
-    })
-
-    if (fullParse.errors.length > 0 && fullParse.data.length === 0) {
-      throw new Error(`CSV Parsing Error: ${fullParse.errors[0].message}`)
-    }
-
-    const allRows = fullParse.data as string[][]
-    if (allRows.length <= headerRowIndex + 1) {
-      throw new Error("CSV file appears to be empty or missing data")
-    }
-
-    const headers = allRows[headerRowIndex].map(h => h.trim().toLowerCase())
-    const dataRows = allRows.slice(headerRowIndex + 1)
-
-    // 4. Map Columns
-    const columnMapping: Record<string, string> = {
-      'first name': 'first_name',
-      'last name': 'last_name',
-      'company': 'company',
-      'position': 'position',
-      'title': 'position',
-      'email address': 'email',
-      'email': 'email',
-      'connected on': 'connected_on',
-      'url': 'linkedin_url',
-      'profile url': 'linkedin_url'
-    }
-
-    const contactsToInsert = dataRows.map(row => {
-      const contact: any = { user_id: userId }
-
-      headers.forEach((header, index) => {
-        const mappedKey = columnMapping[header] || header // Use mapped key or original if no map
-        // Only keep keys we care about (simple sanitization)
-        if (['first_name', 'last_name', 'company', 'position', 'email', 'connected_on', 'linkedin_url'].includes(mappedKey)) {
-          contact[mappedKey] = row[index]?.trim() || null
-        }
-      })
-
-      // Construct full_name
-      if (contact.first_name && contact.last_name) {
-        contact.full_name = `${contact.first_name} ${contact.last_name}`.trim()
-      } else if (contact.first_name) {
-        contact.full_name = contact.first_name
-      }
-
+    // Enrich contacts (Company from Domain) and Sanitize connected_on
+    contactsToInsert.forEach((contact: any) => {
       // Basic Email Enrichment (Company from Domain)
       if (!contact.company && contact.email && contact.email.includes('@')) {
         const domain = contact.email.split('@')[1].toLowerCase()
@@ -132,29 +75,80 @@ export async function POST(request: Request) {
         }
       }
 
-      return contact
-    }).filter(c => c.full_name) // Filter out empty rows
+      // Sanitize connected_on
+      if (contact.connected_on) {
+        const date = new Date(contact.connected_on)
+        if (!isNaN(date.getTime())) {
+          contact.connected_on = date.toISOString()
+        } else {
+          contact.connected_on = null // Invalid date, set to null
+        }
+      }
+    })
 
-    // 5. Insert into Database
-    if (contactsToInsert.length === 0) {
-      return NextResponse.json({ success: true, message: "No valid contacts found to import", num_contacts: 0 })
+    // 5. Manual Upsert (Check existing -> Insert/Update)
+    // Fetch existing contacts to check for duplicates
+    // We only care about linkedin_url for deduplication
+    const { data: existingContacts } = await adminSupabase
+      .from('contacts')
+      .select('id, linkedin_url')
+      .eq('user_id', userId)
+      .not('linkedin_url', 'is', null)
+
+    const existingMap = new Map(
+      existingContacts?.map(c => [c.linkedin_url, c.id]) || []
+    )
+
+    const toInsert: any[] = []
+    const toUpdate: any[] = []
+
+    contactsToInsert.forEach(contact => {
+      if (contact.linkedin_url && existingMap.has(contact.linkedin_url)) {
+        // Update existing
+        toUpdate.push({ ...contact, id: existingMap.get(contact.linkedin_url) })
+      } else {
+        // Insert new
+        toInsert.push(contact)
+      }
+    })
+
+    // Batch Processing Helper
+    const processBatch = async (items: any[], operation: 'insert' | 'upsert') => {
+      const BATCH_SIZE = 100
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        const batch = items.slice(i, i + BATCH_SIZE)
+
+        let error
+        if (operation === 'insert') {
+          const { error: err } = await adminSupabase.from('contacts').insert(batch)
+          error = err
+        } else {
+          const { error: err } = await adminSupabase.from('contacts').upsert(batch)
+          error = err
+        }
+
+        if (error) {
+          console.error(`Batch ${operation} error (rows ${i}-${i + BATCH_SIZE}):`, error)
+          throw new Error(`${operation} failed: ${error.message}`)
+        }
+      }
     }
 
-    const { error: insertError } = await supabase
-      .from('contacts')
-      .upsert(contactsToInsert, {
-        onConflict: 'user_id, linkedin_url',
-        ignoreDuplicates: false
-      })
+    // Perform Inserts in Batches
+    if (toInsert.length > 0) {
+      console.log(`Inserting ${toInsert.length} new contacts...`)
+      await processBatch(toInsert, 'insert')
+    }
 
-    if (insertError) {
-      console.error('Database Insert Error:', insertError)
-      throw new Error(insertError.message)
+    // Perform Updates in Batches
+    if (toUpdate.length > 0) {
+      console.log(`Updating ${toUpdate.length} existing contacts...`)
+      await processBatch(toUpdate, 'upsert')
     }
 
     return NextResponse.json({
       success: true,
-      message: `Successfully uploaded ${contactsToInsert.length} contacts`,
+      message: `Processed ${contactsToInsert.length} contacts (${toInsert.length} new, ${toUpdate.length} updated)`,
       num_contacts: contactsToInsert.length,
       preview: contactsToInsert.slice(0, 5)
     })
