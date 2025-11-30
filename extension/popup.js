@@ -16,12 +16,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     saveKeyBtn.addEventListener('click', () => {
         const key = apiKeyInput.value.trim();
-        if (key) {
-            chrome.storage.local.set({ sixthDegreeApiKey: key }, () => {
-                showSyncUI();
-                statusText.textContent = "Key saved! Ready to sync.";
-            });
+
+        // Validate API key format (should be a UUID)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+        if (!key) {
+            statusText.textContent = "Please enter an API key.";
+            statusText.style.color = "#ef4444";
+            return;
         }
+
+        if (!uuidRegex.test(key)) {
+            statusText.textContent = "Invalid API key format. Please check your key from the app settings.";
+            statusText.style.color = "#ef4444";
+            return;
+        }
+
+        // Valid key - save it
+        chrome.storage.local.set({ sixthDegreeApiKey: key }, () => {
+            showSyncUI();
+            statusText.textContent = "Key saved! Ready to sync.";
+            statusText.style.color = "#10b981";
+        });
     });
 
     resetKeyBtn.addEventListener('click', () => {

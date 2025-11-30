@@ -43,14 +43,9 @@ export async function POST(request: Request) {
         let successCount = 0
         let errorCount = 0
 
-        // Process contacts
+        // Process contacts using upsert to prevent race conditions
         for (const contact of contacts) {
             try {
-                // Basic deduplication logic
-                // 1. Check if contact exists by LinkedIn URL or Name
-                // For MVP, let's just insert/ignore or basic check
-
-                // We need to map the extension data to our schema
                 // Extension sends: { name, headline, profileUrl, avatarUrl, connectedAt, source }
 
                 // Parse name
@@ -58,51 +53,32 @@ export async function POST(request: Request) {
                 const first_name = nameParts[0]
                 const last_name = nameParts.slice(1).join(' ') || ''
 
-                // Check existing in contacts table
-                const { data: existing } = await adminSupabase
+                // Use upsert to atomically insert or update
+                // This prevents race conditions from concurrent uploads
+                const { error: upsertError } = await adminSupabase
                     .from('contacts')
-                    .select('id')
-                    .eq('user_id', user.id)
-                    .eq('linkedin_url', contact.profileUrl)
-                    .single()
+                    .upsert({
+                        user_id: user.id,
+                        first_name,
+                        last_name,
+                        full_name: contact.name,
+                        company: '', // We don't extract company cleanly yet
+                        position: contact.headline,
+                        linkedin_url: contact.profileUrl,
+                        avatar_url: contact.avatarUrl,
+                        source: 'linkedin_extension',
+                        email: '', // Email is not scraped
+                        updated_at: new Date().toISOString()
+                    }, {
+                        onConflict: 'user_id,linkedin_url', // Unique constraint
+                        ignoreDuplicates: false // Update existing records
+                    })
 
-                if (existing) {
-                    // Update existing contact
-                    await adminSupabase
-                        .from('contacts')
-                        .update({
-                            position: contact.headline,
-                            avatar_url: contact.avatarUrl,
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('id', existing.id)
-
-                    successCount++
+                if (upsertError) {
+                    console.error('Upsert error:', upsertError)
+                    errorCount++
                 } else {
-                    // Insert new contact
-                    const { error: insertError } = await adminSupabase
-                        .from('contacts')
-                        .insert({
-                            user_id: user.id,
-                            first_name,
-                            last_name,
-                            full_name: contact.name,
-                            company: '', // We don't extract company cleanly yet
-                            position: contact.headline,
-                            linkedin_url: contact.profileUrl,
-                            avatar_url: contact.avatarUrl,
-                            source: 'linkedin_extension',
-                            email: '', // Email is not scraped
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        })
-
-                    if (insertError) {
-                        console.error('Insert error:', insertError)
-                        errorCount++
-                    } else {
-                        successCount++
-                    }
+                    successCount++
                 }
             } catch (err) {
                 console.error('Processing error:', err)

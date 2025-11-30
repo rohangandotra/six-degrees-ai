@@ -1,30 +1,47 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { timingSafeEqual } from 'crypto'
 
 /**
  * Get all feedback submissions (admin only)
  * GET /api/feedback/list?status=new&limit=100
  *
+ * Headers:
+ * - Authorization: Bearer <admin_api_key> (required)
+ *
  * Query params:
  * - status: Filter by status (new, reviewed, resolved) - optional
  * - limit: Max results (default: 100)
- * - adminKey: Admin authentication key (required)
  */
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status')
-    const limit = parseInt(searchParams.get('limit') || '100')
-    const adminKey = searchParams.get('adminKey')
+    // Get admin key from Authorization header
+    const authHeader = request.headers.get('authorization')
+    const providedKey = authHeader?.replace('Bearer ', '')?.trim()
 
-    // Simple admin authentication
-    // TODO: Replace with proper admin authentication
-    if (adminKey !== process.env.ADMIN_API_KEY) {
+    // Admin authentication with constant-time comparison
+    const expectedKey = process.env.ADMIN_API_KEY
+    if (!providedKey || !expectedKey || providedKey.length !== expectedKey.length) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
       )
     }
+
+    // Use timing-safe comparison to prevent timing attacks
+    const providedBuffer = Buffer.from(providedKey)
+    const expectedBuffer = Buffer.from(expectedKey)
+
+    if (!timingSafeEqual(providedBuffer, expectedBuffer)) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    const limit = parseInt(searchParams.get('limit') || '100')
 
     const supabase = createAdminClient()
 
