@@ -64,7 +64,43 @@ const PURPOSE_BOOST_MAP: Record<string, { positionKeywords: string[]; companyKey
     companyKeywords: [],
     scoreBoost: 8
   }
+}
 };
+
+// Seniority Scoring Map
+const SENIORITY_MAP: Record<string, number> = {
+  'founder': 15,
+  'co-founder': 15,
+  'ceo': 15,
+  'cto': 15,
+  'cpo': 15,
+  'cmo': 15,
+  'coo': 15,
+  'cfo': 15,
+  'president': 15,
+  'partner': 12,
+  'vice president': 10,
+  'vp': 10,
+  'director': 10,
+  'head': 8,
+  'principal': 8,
+  'lead': 5,
+  'manager': 3,
+  'senior': 3,
+  'staff': 3
+};
+
+// Company Prestige Map (Simple list of top tier firms)
+const PRESTIGE_COMPANIES = [
+  // Tech
+  'google', 'alphabet', 'meta', 'facebook', 'apple', 'amazon', 'microsoft', 'netflix', 'nvidia', 'tesla', 'openai', 'anthropic', 'stripe', 'airbnb', 'uber', 'lyft', 'salesforce', 'adobe', 'oracle', 'palantir', 'databricks', 'snowflake',
+  // Finance
+  'goldman sachs', 'morgan stanley', 'jpmorgan', 'chase', 'blackrock', 'blackstone', 'citadel', 'two sigma', 'bridgewater',
+  // Consulting
+  'mckinsey', 'bcg', 'bain', 'deloitte', 'pwc', 'ey', 'kpmg',
+  // VC
+  'sequoia', 'a16z', 'andreessen', 'benchmark', 'accel', 'greylock', 'kleiner', 'lightspeed', 'founders fund', 'y combinator', 'techstars'
+];
 
 async function filterWithAI(query: string, purpose: string, uniqueCompanies: string[], uniquePositions: string[]) {
   try {
@@ -91,9 +127,9 @@ async function filterWithAI(query: string, purpose: string, uniqueCompanies: str
       messages: [
         {
           role: "system",
-          content: `You are a smart contact filter. 
+          content: `You are an expert contact search assistant.
           
-          Your Goal: Select items from the provided lists that match the user's search intent.
+          Your Goal: deeply understand the user's search intent and select the most relevant companies and positions from the provided lists.
           
           Input:
           - User Query: "${query}"${purposeContext}
@@ -101,20 +137,16 @@ async function filterWithAI(query: string, purpose: string, uniqueCompanies: str
           - Available Positions: ${positionsList}
           
           Instructions:
-          1. Analyze the User Query to understand the intent (e.g., "tech", "finance", "investors", "founders").
-          2. Select ALL companies from "Available Companies" that fit this intent. Use your world knowledge (e.g., if query is "tech", select "Wayfair", "Google", "Stripe").
-          3. Select ALL positions from "Available Positions" that fit this intent (e.g., if query is "tech", select "Software Engineer", "CTO").
-          4. GENERATE a list of "relevant_keywords" that are synonyms or related terms to the query (e.g., for "tech", include "software", "developer", "engineer", "technology", "saas").
-          5. Return JSON with "selected_companies", "selected_positions", and "relevant_keywords".
+          1. **Analyze Intent**: Look beyond keywords. If user asks for "investors", look for "Partner", "VC", "Angel", "Sequoia". If "tech leaders", look for "CTO", "VP Engineering", "Google".
+          2. **Select Companies**: Pick ALL companies that match the industry or prestige level implied.
+          3. **Select Positions**: Pick ALL positions that match the role or seniority implied.
+          4. **Generate Keywords**: Create a list of 5-10 high-value keywords (synonyms, related roles, industries) to catch items that might not be in the lists.
           
-          Example:
-          Query: "tech people"
-          Available Companies: ["Wayfair", "McKinsey", "Stripe", "Starbucks"]
-          Available Positions: ["Software Engineer", "Consultant", "Barista"]
-          Result: {
-            "selected_companies": ["Wayfair", "Stripe"], 
-            "selected_positions": ["Software Engineer"],
-            "relevant_keywords": ["technology", "software", "developer", "engineer", "saas", "startup"]
+          Return JSON:
+          {
+            "selected_companies": ["Company A", "Company B"],
+            "selected_positions": ["Position X", "Position Y"],
+            "relevant_keywords": ["keyword1", "keyword2"]
           }
           `
         },
@@ -357,6 +389,39 @@ export async function POST(request: Request) {
             score += boostMap.scoreBoost;
             purposeBoostApplied = true;
           }
+        }
+
+        // --- NEW SCORING LOGIC ---
+
+        // 1. Seniority Boost
+        let seniorityScore = 0;
+        for (const [role, boost] of Object.entries(SENIORITY_MAP)) {
+          if (position.includes(role)) {
+            seniorityScore = Math.max(seniorityScore, boost); // Take highest match
+          }
+        }
+        score += seniorityScore;
+
+        // 2. Prestige Company Boost
+        const isPrestige = PRESTIGE_COMPANIES.some(pc => company.includes(pc));
+        if (isPrestige) {
+          score += 10;
+        }
+
+        // 3. Recency Boost (Prioritize fresh connections)
+        if (contact.connected_on) {
+          const connectedDate = new Date(contact.connected_on);
+          const now = new Date();
+          const diffTime = Math.abs(now.getTime() - connectedDate.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          if (diffDays < 90) score += 5; // < 3 months
+          else if (diffDays < 365) score += 3; // < 1 year
+        }
+
+        // 4. Own Contact Boost (Slight preference for direct connections)
+        if (contact.source === 'own') {
+          score += 5;
         }
 
         // Determine Match Reason
