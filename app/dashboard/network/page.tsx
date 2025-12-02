@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { Users, Search, Loader2, Mail, Check, X, UserPlus } from "lucide-react"
+import { Users, Search, Loader2, Mail, Check, X, UserPlus, Network as NetworkIcon } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getApiUrl } from "@/lib/api-config"
+import NetworkGraph from "@/components/network-graph"
 
 interface Connection {
   connection_id: string
@@ -43,6 +44,7 @@ export default function NetworkPage() {
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<User[]>([])
+  const [graphContacts, setGraphContacts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const { toast } = useToast()
@@ -51,6 +53,7 @@ export default function NetworkPage() {
   useEffect(() => {
     fetchConnections()
     fetchPendingRequests()
+    fetchGraphContacts()
   }, [])
 
   const fetchConnections = async () => {
@@ -74,6 +77,18 @@ export default function NetworkPage() {
       }
     } catch (error) {
       console.error('Error fetching pending requests:', error)
+    }
+  }
+
+  const fetchGraphContacts = async () => {
+    try {
+      const response = await fetch(getApiUrl('/api/contacts/list'))
+      if (response.ok) {
+        const data = await response.json()
+        setGraphContacts(data.contacts || [])
+      }
+    } catch (error) {
+      console.error('Error fetching contacts for graph:', error)
     }
   }
 
@@ -209,10 +224,14 @@ export default function NetworkPage() {
       </div>
 
       <Tabs defaultValue="connections" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="connections">
             <Users className="w-4 h-4 mr-2" />
             My Connections ({connections.length})
+          </TabsTrigger>
+          <TabsTrigger value="graph">
+            <NetworkIcon className="w-4 h-4 mr-2" />
+            Graph View
           </TabsTrigger>
           <TabsTrigger value="find">
             <Search className="w-4 h-4 mr-2" />
@@ -223,6 +242,11 @@ export default function NetworkPage() {
             Pending ({pendingRequests.length})
           </TabsTrigger>
         </TabsList>
+
+        {/* Graph View Tab */}
+        <TabsContent value="graph" className="space-y-4">
+          <NetworkGraph contacts={graphContacts} />
+        </TabsContent>
 
         {/* My Connections Tab */}
         <TabsContent value="connections" className="space-y-4">
