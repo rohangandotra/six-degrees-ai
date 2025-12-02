@@ -18,6 +18,8 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const { toast } = useToast()
   const [userId, setUserId] = useState<string | null>(null)
+  const [referralLink, setReferralLink] = useState("")
+  const [referralCount, setReferralCount] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -30,6 +32,18 @@ export default function SettingsPage() {
         setUserId(user.id)
         // Pre-fill email if not set
         if (email === "john.doe@example.com") setEmail(user.email || "")
+
+        // Fetch referral data
+        try {
+          const response = await fetch('/api/user/referral')
+          if (response.ok) {
+            const data = await response.json()
+            setReferralLink(data.referralLink)
+            setReferralCount(data.referralCount)
+          }
+        } catch (error) {
+          console.error('Error fetching referral data:', error)
+        }
       }
     }
     fetchUser()
@@ -165,6 +179,39 @@ export default function SettingsPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               Paste this key into the Sixth Degree Chrome Extension to sync your connections.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Referrals */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Invite Friends</CardTitle>
+          <CardDescription>Share Sixth Degree and earn rewards</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Your Referral Link</Label>
+            <div className="flex gap-2">
+              <Input
+                value={referralLink || "Loading..."}
+                readOnly
+                className="font-mono bg-muted"
+              />
+              <Button
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(referralLink)
+                  toast({ title: "Referral link copied!" })
+                }}
+                disabled={!referralLink}
+              >
+                Copy
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              You've referred <span className="font-semibold text-foreground">{referralCount}</span> {referralCount === 1 ? 'person' : 'people'} so far! 🎉
             </p>
           </div>
         </CardContent>

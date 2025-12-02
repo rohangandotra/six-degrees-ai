@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 
@@ -18,8 +18,18 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [referralCode, setReferralCode] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
+
+  // Capture referral code from URL
+  useEffect(() => {
+    const ref = searchParams.get('ref')
+    if (ref) {
+      setReferralCode(ref)
+    }
+  }, [searchParams])
 
   // Password strength validation
   const getPasswordStrength = (pwd: string) => {
@@ -86,6 +96,7 @@ export default function SignUpPage() {
             full_name: `${firstName} ${lastName}`.trim(),
             first_name: firstName,
             last_name: lastName,
+            referral_code: referralCode, // Store in metadata
           },
         },
       })
@@ -102,6 +113,29 @@ export default function SignUpPage() {
       }
 
       if (data.user) {
+        // If there's a referral code, update the users table with referred_by
+        if (referralCode) {
+          try {
+            // Find the referrer's ID
+            const { data: referrer } = await supabase
+              .from('users')
+              .select('id')
+              .eq('referral_code', referralCode)
+              .single()
+
+            if (referrer) {
+              // Update the new user's referred_by field
+              await supabase
+                .from('users')
+                .update({ referred_by: referrer.id })
+                .eq('email', email.trim())
+            }
+          } catch (refError) {
+            console.error('Error processing referral:', refError)
+            // Don't block signup if referral processing fails
+          }
+        }
+
         toast({
           title: "Account created",
           description: "Check your email to verify your account",
@@ -183,12 +217,12 @@ export default function SignUpPage() {
                       <div
                         key={level}
                         className={`h-1 flex-1 rounded ${passwordValidation.strength >= level
-                            ? passwordValidation.strength <= 2
-                              ? 'bg-red-500'
-                              : passwordValidation.strength === 3
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                            : 'bg-gray-200'
+                          ? passwordValidation.strength <= 2
+                            ? 'bg-red-500'
+                            : passwordValidation.strength === 3
+                              ? 'bg-yellow-500'
+                              : 'bg-green-500'
+                          : 'bg-gray-200'
                           }`}
                       />
                     ))}
