@@ -50,6 +50,49 @@ export default function SettingsPage() {
     router.push("/auth/login")
   }
 
+  const handleExport = async () => {
+    try {
+      const response = await fetch('/api/user/export')
+      if (!response.ok) throw new Error('Export failed')
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `six_degrees_export_${userId}.json`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast({ title: "Data exported successfully" })
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "Please try again later",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure? This will permanently delete your account and all data. This action cannot be undone.")) return
+
+    try {
+      const response = await fetch('/api/user/delete', { method: 'DELETE' })
+      if (!response.ok) throw new Error('Deletion failed')
+
+      toast({ title: "Account deleted" })
+      router.push('/auth/login')
+    } catch (error) {
+      toast({
+        title: "Deletion failed",
+        description: "Please try again later",
+        variant: "destructive"
+      })
+    }
+  }
+
   return (
     <div className="p-6 space-y-6 max-w-2xl">
       {/* Header */}
@@ -127,6 +170,25 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Data & Privacy */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Data & Privacy</CardTitle>
+          <CardDescription>Manage your data rights (GDPR/CCPA)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label>Export Data</Label>
+              <p className="text-xs text-muted-foreground">Download a copy of all your data</p>
+            </div>
+            <Button variant="outline" onClick={handleExport}>
+              Export JSON
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Account Settings */}
       <Card>
         <CardHeader>
@@ -155,9 +217,13 @@ export default function SettingsPage() {
       <Card className="border-destructive/50">
         <CardHeader>
           <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardDescription>Irreversible actions</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button variant="destructive">Delete Account</Button>
+          <Button variant="destructive" onClick={handleDelete}>Delete Account</Button>
+          <p className="text-xs text-muted-foreground mt-2">
+            Permanently delete your account and all associated data. This action cannot be undone.
+          </p>
         </CardContent>
       </Card>
     </div>

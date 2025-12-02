@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { DOMAIN_TO_COMPANY } from '@/lib/constants/company-domains'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/security'
 
 export async function POST(request: Request) {
   try {
@@ -26,15 +27,17 @@ export async function POST(request: Request) {
 
     const userId = user.id
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY")
+    // Rate Limit Check
+    const rateLimit = checkRateLimit(userId, RATE_LIMITS.upload)
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfter: rateLimit.resetTime },
+        { status: 429 }
+      )
     }
 
-    // 2. Create Admin Client (Bypass RLS)
-    const adminSupabase = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    )
+    // Use authenticated client instead of admin client for security
+    // RLS policies must be in place to allow insert/upsert for own rows
 
     // 2. Parse Request Body (JSON)
     const body = await request.json()
@@ -89,7 +92,7 @@ export async function POST(request: Request) {
     // 5. Manual Upsert (Check existing -> Insert/Update)
     // Fetch existing contacts to check for duplicates
     // We only care about linkedin_url for deduplication
-    const { data: existingContacts } = await adminSupabase
+    const { data: existingContacts } = await supabase
       .from('contacts')
       .select('id, linkedin_url')
       .eq('user_id', userId)
@@ -120,10 +123,10 @@ export async function POST(request: Request) {
 
         let error
         if (operation === 'insert') {
-          const { error: err } = await adminSupabase.from('contacts').insert(batch)
+          const { error: err } = await supabase.from('contacts').insert(batch)
           error = err
         } else {
-          const { error: err } = await adminSupabase.from('contacts').upsert(batch)
+          const { error: err } = await supabase.from('contacts').upsert(batch)
           error = err
         }
 

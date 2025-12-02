@@ -21,6 +21,32 @@ export default function SignUpPage() {
   const router = useRouter()
   const { toast } = useToast()
 
+  // Password strength validation
+  const getPasswordStrength = (pwd: string) => {
+    let strength = 0
+    const checks = {
+      length: pwd.length >= 8,
+      uppercase: /[A-Z]/.test(pwd),
+      lowercase: /[a-z]/.test(pwd),
+      number: /[0-9]/.test(pwd),
+      special: /[!@#$%^&*(),.?":{}|<>]/.test(pwd)
+    }
+
+    if (checks.length) strength++
+    if (checks.uppercase) strength++
+    if (checks.lowercase) strength++
+    if (checks.number) strength++
+    if (checks.special) strength++
+
+    return { strength, checks }
+  }
+
+  const passwordValidation = getPasswordStrength(password)
+  const isPasswordValid = passwordValidation.checks.length &&
+    passwordValidation.checks.uppercase &&
+    passwordValidation.checks.lowercase &&
+    passwordValidation.checks.number
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -33,10 +59,10 @@ export default function SignUpPage() {
       return
     }
 
-    if (password.length < 6) {
+    if (!isPasswordValid) {
       toast({
-        title: "Password too short",
-        description: "Password must be at least 6 characters.",
+        title: "Password too weak",
+        description: "Password must be at least 8 characters with uppercase, lowercase, and a number.",
         variant: "destructive",
       })
       return
@@ -149,6 +175,47 @@ export default function SignUpPage() {
                 disabled={isLoading}
                 required
               />
+              {password && (
+                <div className="space-y-2">
+                  {/* Password Strength Meter */}
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <div
+                        key={level}
+                        className={`h-1 flex-1 rounded ${passwordValidation.strength >= level
+                            ? passwordValidation.strength <= 2
+                              ? 'bg-red-500'
+                              : passwordValidation.strength === 3
+                                ? 'bg-yellow-500'
+                                : 'bg-green-500'
+                            : 'bg-gray-200'
+                          }`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Password Requirements */}
+                  <div className="text-xs space-y-1">
+                    <div className={passwordValidation.checks.length ? 'text-green-600' : 'text-muted-foreground'}>
+                      {passwordValidation.checks.length ? '✓' : '○'} At least 8 characters
+                    </div>
+                    <div className={passwordValidation.checks.uppercase ? 'text-green-600' : 'text-muted-foreground'}>
+                      {passwordValidation.checks.uppercase ? '✓' : '○'} One uppercase letter
+                    </div>
+                    <div className={passwordValidation.checks.lowercase ? 'text-green-600' : 'text-muted-foreground'}>
+                      {passwordValidation.checks.lowercase ? '✓' : '○'} One lowercase letter
+                    </div>
+                    <div className={passwordValidation.checks.number ? 'text-green-600' : 'text-muted-foreground'}>
+                      {passwordValidation.checks.number ? '✓' : '○'} One number
+                    </div>
+                    {passwordValidation.checks.special && (
+                      <div className="text-green-600">
+                        ✓ Special character (bonus!)
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">Confirm password</Label>

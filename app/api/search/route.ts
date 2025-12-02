@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { checkRateLimit, RATE_LIMITS } from '@/lib/security'
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -123,7 +124,7 @@ async function filterWithAI(query: string, purpose: string, uniqueCompanies: str
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",
@@ -180,6 +181,15 @@ export async function POST(request: Request) {
     }
 
     const userId = session.user.id
+
+    // Rate Limit Check
+    const rateLimit = checkRateLimit(userId, RATE_LIMITS.search)
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests', retryAfter: rateLimit.resetTime },
+        { status: 429 }
+      )
+    }
 
     // 2. Fetch User's Own Contacts
     const adminSupabase = await createAdminClient()

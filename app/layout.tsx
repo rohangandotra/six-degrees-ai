@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
 import { AuthHashHandler } from "@/components/auth-hash-handler"
 import { CSPostHogProvider } from "@/providers/posthog-provider"
+import { CookieBanner } from "@/components/cookie-banner"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -53,6 +54,7 @@ export default function RootLayout({
           <AuthHashHandler />
           {children}
           <Toaster />
+          <CookieBanner />
           <Analytics />
         </CSPostHogProvider>
       </body>

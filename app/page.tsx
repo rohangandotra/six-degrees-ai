@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowRight, Network, Search, Users, Zap } from "lucide-react"
+import { ArrowRight, Network, Search, Shield, Zap } from "lucide-react"
 
 export default function LandingPage() {
   return (
@@ -53,15 +53,6 @@ export default function LandingPage() {
           <Card>
             <CardHeader>
               <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                <Users className="w-5 h-5 text-primary" />
-              </div>
-              <CardTitle>Smart Upload</CardTitle>
-              <CardDescription>Upload your contacts via CSV and organize them instantly</CardDescription>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader>
-              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
                 <Search className="w-5 h-5 text-primary" />
               </div>
               <CardTitle>AI-Powered Search</CardTitle>
@@ -71,9 +62,18 @@ export default function LandingPage() {
           <Card>
             <CardHeader>
               <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+                <Shield className="w-5 h-5 text-primary" />
+              </div>
+              <CardTitle>Your Data is Safe</CardTitle>
+              <CardDescription>Enterprise-grade security with GDPR & CCPA compliance</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
                 <Zap className="w-5 h-5 text-primary" />
               </div>
-              <CardTitle>Network Insights</CardTitle>
+              <CardTitle>Sixth Degree</CardTitle>
               <CardDescription>Explore your extended network up to the 6th degree</CardDescription>
             </CardHeader>
           </Card>
