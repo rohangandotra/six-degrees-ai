@@ -12,8 +12,9 @@ async function createAdminClient() {
 
 export async function PATCH(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
+    const { id } = await params
     try {
         const { share_network } = await request.json()
 
@@ -37,7 +38,7 @@ export async function PATCH(
         }
 
         const userId = session.user.id
-        const connectionId = params.id
+        const connectionId = id
         const adminSupabase = await createAdminClient()
 
         // Get connection to determine user's role

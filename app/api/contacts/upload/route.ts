@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     const toInsert: any[] = []
     const toUpdate: any[] = []
 
-    contactsToInsert.forEach(contact => {
+    contactsToInsert.forEach((contact: any) => {
       if (contact.linkedin_url && existingMap.has(contact.linkedin_url)) {
         // Update existing
         toUpdate.push({ ...contact, id: existingMap.get(contact.linkedin_url) })

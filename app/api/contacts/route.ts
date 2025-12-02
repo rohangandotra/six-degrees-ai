@@ -19,6 +19,7 @@ export async function GET(request: Request) {
 
         // 1. Verify Session
         const supabase = await createClient()
+        if (!supabase) return NextResponse.json({ error: 'Database connection failed' }, { status: 500 })
         const { data: { session } } = await supabase.auth.getSession()
 
         if (!session) {

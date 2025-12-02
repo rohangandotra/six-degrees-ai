@@ -66,7 +66,7 @@ const PURPOSE_BOOST_MAP: Record<string, { positionKeywords: string[]; companyKey
     scoreBoost: 8
   }
 }
-};
+
 
 // Seniority Scoring Map
 const SENIORITY_MAP: Record<string, number> = {
