@@ -82,15 +82,38 @@ export async function GET(request: Request) {
 
         // Fetch minimal data for deduplication
         // We fetch in chunks if needed, but for now assuming < 50k rows fits in memory
-        const { data: allContacts, error: contactsError } = await adminSupabase
-            .from('contacts')
-            .select('linkedin_url, email')
-            .in('user_id', contributingUserIds)
+        // Fetch all contacts with pagination (Supabase defaults to 1000 rows)
+        let allContacts: any[] = []
+        const PAGE_SIZE = 1000
+        let page = 0
+        let hasMore = true
 
-        if (contactsError) {
-            console.error('Error fetching contacts for stats:', contactsError)
-            throw contactsError
+        while (hasMore) {
+            const { data, error } = await adminSupabase
+                .from('contacts')
+                .select('linkedin_url, email')
+                .in('user_id', contributingUserIds)
+                .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+
+            if (error) {
+                console.error('Error fetching contacts page:', error)
+                throw error
+            }
+
+            if (data) {
+                allContacts = [...allContacts, ...data]
+                if (data.length < PAGE_SIZE) {
+                    hasMore = false
+                } else {
+                    page++
+                }
+            } else {
+                hasMore = false
+            }
         }
+
+        // Error handling is done inside the loop
+
 
         const uniqueContacts = new Set<string>()
         let unidentifiableCount = 0

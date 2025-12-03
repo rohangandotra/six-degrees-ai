@@ -3,48 +3,33 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowRight, Network, Search, Shield, Zap } from "lucide-react"
 
+import LandingHero from "@/components/landing-hero"
+
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted">
+    <div className="min-h-screen">
       {/* Header */}
-      <header className="border-b border-border/40 bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-black/50 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Network className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <Network className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-foreground">6th Degree AI</span>
+            <span className="text-xl font-bold text-white tracking-tight">Sixth Degree</span>
           </div>
           <div className="flex gap-3">
             <Link href="/auth/login">
-              <Button variant="outline">Sign In</Button>
+              <Button variant="ghost" className="text-white hover:bg-white/10">Sign In</Button>
             </Link>
             <Link href="/auth/sign-up">
-              <Button>Get Started</Button>
+              <Button className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20">Get Started</Button>
             </Link>
           </div>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-        <h1 className="text-5xl sm:text-6xl font-bold text-foreground mb-6 text-balance">
-          Unlock Your Professional Network
-        </h1>
-        <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto text-balance">
-          Discover, search, and analyze your professional network with AI-powered insights. Connect to the 6th degree.
-        </p>
-        <div className="flex gap-4 justify-center flex-wrap">
-          <Link href="/auth/sign-up">
-            <Button size="lg" className="gap-2">
-              Start Free <ArrowRight className="w-4 h-4" />
-            </Button>
-          </Link>
-          <Button size="lg" variant="outline">
-            Learn More
-          </Button>
-        </div>
-      </section>
+      <LandingHero />
 
       {/* Features */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">

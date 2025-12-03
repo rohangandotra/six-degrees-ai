@@ -229,10 +229,6 @@ export default function NetworkPage() {
             <Users className="w-4 h-4 mr-2" />
             My Connections ({connections.length})
           </TabsTrigger>
-          <TabsTrigger value="graph">
-            <NetworkIcon className="w-4 h-4 mr-2" />
-            Graph View
-          </TabsTrigger>
           <TabsTrigger value="find">
             <Search className="w-4 h-4 mr-2" />
             Find People
@@ -242,11 +238,6 @@ export default function NetworkPage() {
             Pending ({pendingRequests.length})
           </TabsTrigger>
         </TabsList>
-
-        {/* Graph View Tab */}
-        <TabsContent value="graph" className="space-y-4">
-          <NetworkGraph contacts={graphContacts} />
-        </TabsContent>
 
         {/* My Connections Tab */}
         <TabsContent value="connections" className="space-y-4">

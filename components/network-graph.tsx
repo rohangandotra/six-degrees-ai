@@ -37,7 +37,7 @@ export default function NetworkGraph({ contacts }: NetworkGraphProps) {
         nodes: [],
         links: []
     })
-    const graphRef = useRef<any>()
+    const graphRef = useRef<any>(null)
 
     useEffect(() => {
         if (!contacts || contacts.length === 0) return

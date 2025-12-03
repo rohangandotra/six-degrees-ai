@@ -366,8 +366,16 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">2nd Degree</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">—</div>
-            <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
+            {stats.loading ? (
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            ) : (
+              <>
+                <div className="text-2xl md:text-3xl font-bold">
+                  {Math.max(0, stats.totalContacts - stats.directConnections).toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">People connected to your connections</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -376,8 +384,18 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Extended Network</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">—</div>
-            <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
+            {stats.loading ? (
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            ) : (
+              <>
+                <div className="text-2xl md:text-3xl font-bold">
+                  {Math.max(0, stats.totalContacts - stats.directConnections).toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Friends of friends (2nd degree)
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -385,42 +403,42 @@ export default function DashboardPage() {
       {/* Upload Section */}
       <Collapsible open={isImportOpen} onOpenChange={setIsImportOpen}>
         <Card>
-          <CollapsibleTrigger className="w-full">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="text-left">
-                  <CardTitle className="flex items-center gap-2">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CollapsibleTrigger asChild>
+                <div className="text-left cursor-pointer flex-1 group">
+                  <CardTitle className="flex items-center gap-2 group-hover:text-primary transition-colors">
                     Import Contacts
                     <ChevronDown className={`w-4 h-4 transition-transform ${isImportOpen ? '' : '-rotate-90'}`} />
                   </CardTitle>
                   <CardDescription>Upload a CSV file to import your contacts</CardDescription>
                 </div>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={(e) => e.stopPropagation()}>
-                        <Info className="w-5 h-5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="left" className="max-w-sm p-4">
-                      <div className="space-y-2">
-                        <p className="font-semibold text-sm">How to export your LinkedIn connections:</p>
-                        <ol className="text-xs space-y-1 list-decimal list-inside">
-                          <li>Go to <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">LinkedIn Settings</a></li>
-                          <li>Click "Get a copy of your data"</li>
-                          <li>Select "Connections" only</li>
-                          <li>Click "Request archive"</li>
-                          <li>Wait for email (usually 10 minutes)</li>
-                          <li>Download the ZIP file</li>
-                          <li>Extract and upload the Connections.csv file here</li>
-                        </ol>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </CardHeader>
-          </CollapsibleTrigger>
+              </CollapsibleTrigger>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                      <Info className="w-5 h-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="max-w-sm p-4">
+                    <div className="space-y-2">
+                      <p className="font-semibold text-sm">How to export your LinkedIn connections:</p>
+                      <ol className="text-xs space-y-1 list-decimal list-inside">
+                        <li>Go to <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">LinkedIn Settings</a></li>
+                        <li>Click "Get a copy of your data"</li>
+                        <li>Select "Connections" only</li>
+                        <li>Click "Request archive"</li>
+                        <li>Wait for email (usually 10 minutes)</li>
+                        <li>Download the ZIP file</li>
+                        <li>Extract and upload the Connections.csv file here</li>
+                      </ol>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </CardHeader>
           <CollapsibleContent>
             <CardContent className="space-y-4">
               <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
