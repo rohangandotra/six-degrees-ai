@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/collapsible"
 import { ChevronDown } from "lucide-react"
 
+
 // Proper CSV parser that handles quoted values
 function parseCSV(text: string): string[][] {
   const lines: string[][] = []
@@ -366,16 +367,8 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">2nd Degree</CardTitle>
           </CardHeader>
           <CardContent>
-            {stats.loading ? (
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            ) : (
-              <>
-                <div className="text-2xl md:text-3xl font-bold">
-                  {Math.max(0, stats.totalContacts - stats.directConnections).toLocaleString()}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">People connected to your connections</p>
-              </>
-            )}
+            <div className="text-2xl font-bold">—</div>
+            <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
           </CardContent>
         </Card>
 
@@ -384,18 +377,8 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Extended Network</CardTitle>
           </CardHeader>
           <CardContent>
-            {stats.loading ? (
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            ) : (
-              <>
-                <div className="text-2xl md:text-3xl font-bold">
-                  {Math.max(0, stats.totalContacts - stats.directConnections).toLocaleString()}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Friends of friends (2nd degree)
-                </p>
-              </>
-            )}
+            <div className="text-2xl font-bold">—</div>
+            <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
           </CardContent>
         </Card>
       </div>
