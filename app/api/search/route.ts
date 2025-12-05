@@ -369,6 +369,13 @@ export async function POST(request: Request) {
         const existing = mergedMap.get(c.id);
         existing.score += c.score; // Boost score
         existing.match_reason += ` + ${c.match_reason}`;
+
+        // Enrich metadata if missing in existing record (e.g. from vector search)
+        if (!existing.linkedin_url && c.linkedin_url) existing.linkedin_url = c.linkedin_url;
+        if (!existing.company && c.company) existing.company = c.company;
+        if (!existing.position && c.position) existing.position = c.position;
+        if (!existing.location && c.location) existing.location = c.location;
+        if (!existing.email && c.email) existing.email = c.email;
       } else {
         mergedMap.set(c.id, c);
       }
