@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Loader2, Mail, Sparkles } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getApiUrl } from "@/lib/api-config"
-import { useCompletion } from "ai/react"
+import { useCompletion } from "@ai-sdk/react"
 
 interface Contact {
     id: string
@@ -223,8 +223,8 @@ export default function SearchPage() {
                                         <div className="flex flex-wrap gap-2 text-xs mb-3">
                                             {contact.match_reason && (
                                                 <span className={`px-2 py-1 rounded-md font-medium border flex items-center gap-1 ${contact.match_reason.startsWith('AI Match')
-                                                        ? 'bg-purple-500/10 text-purple-700 border-purple-500/20'
-                                                        : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/10'
+                                                    ? 'bg-purple-500/10 text-purple-700 border-purple-500/20'
+                                                    : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/10'
                                                     }`}>
                                                     {contact.match_reason.startsWith('AI Match') && <Sparkles className="w-3 h-3" />}
                                                     {contact.match_reason.replace('AI Match:', '').trim()}
