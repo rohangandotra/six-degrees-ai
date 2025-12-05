@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Loader2, Mail, Building, Briefcase } from "lucide-react"
+import { Search, Loader2, Mail, Sparkles } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getApiUrl } from "@/lib/api-config"
+import { useCompletion } from "ai/react"
 
 interface Contact {
     id: string
@@ -32,6 +33,11 @@ export default function SearchPage() {
     const [hasSearched, setHasSearched] = useState(false)
     const { toast } = useToast()
 
+    // Streaming AI Answer
+    const { complete, completion, isLoading: isStreaming, stop } = useCompletion({
+        api: getApiUrl("/api/search/answer"),
+    })
+
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!query.trim()) return
@@ -39,6 +45,7 @@ export default function SearchPage() {
         setIsLoading(true)
         setResults([])
         setHasSearched(false)
+        stop() // Stop any previous stream
 
         try {
             console.log("Searching for:", query)
@@ -57,8 +64,17 @@ export default function SearchPage() {
 
             const data = await response.json()
             console.log("Search results:", data.results)
-            setResults(data.results || [])
+            const newResults = data.results || []
+            setResults(newResults)
             setHasSearched(true)
+
+            // Trigger AI Stream if we have results
+            if (newResults.length > 0) {
+                complete(query, {
+                    body: { results: newResults.slice(0, 5) } // Send top 5 for summary
+                })
+            }
+
         } catch (error: any) {
             console.error("Search error:", error)
             toast({
@@ -145,6 +161,25 @@ export default function SearchPage() {
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* AI Summary / Streaming Area */}
+                {(isStreaming || completion) && (
+                    <div className="mb-8 text-left animate-in fade-in slide-in-from-top-2 duration-500">
+                        <Card className="bg-primary/5 border-primary/20">
+                            <CardContent className="p-4 flex gap-4">
+                                <div className="p-2 bg-background rounded-full h-fit shadow-sm">
+                                    <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="font-semibold text-sm uppercase tracking-wide text-primary">AI Insight</h3>
+                                    <p className="text-sm leading-relaxed text-foreground/90 font-medium whitespace-pre-wrap">
+                                        {completion}
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
 
                 {/* Results Area */}
                 <div className="space-y-6">

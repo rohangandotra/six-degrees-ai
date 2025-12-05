@@ -11,6 +11,7 @@
     "test:security": "jest tests/security"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.77",
     "@capacitor/android": "^7.4.4",
     "@capacitor/cli": "^7.4.4",
     "@capacitor/core": "^7.4.4",
@@ -48,6 +49,7 @@
     "@types/bcryptjs": "^3.0.0",
     "@types/papaparse": "^5.5.0",
     "@vercel/analytics": "latest",
+    "ai": "^5.0.107",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
