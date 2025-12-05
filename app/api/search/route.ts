@@ -463,13 +463,21 @@ export async function POST(request: Request) {
               Task:
               1. Analyze the query and the candidate list.
               2. Select ONLY candidates that are strictly relevant to the query.
-              3. Return a JSON object with an array of indices in order of relevance.
+              3. For each selected candidate, provide a 1-sentence justification (max 15 words) explaining why they match.
+              4. Return a JSON object with an array of result objects.
               
-              Output Format: { "ranked_indices": [2, 0, 5] } 
+              Output Format: 
+              { 
+                "ranked_results": [
+                  { "index": 2, "reason": "Former VP of Engineering at Google matches 'Tech Lead'." },
+                  { "index": 5, "reason": "Investment Partner at Sequoia matches 'VC'." }
+                ] 
+              } 
+              
               CRITICAL: 
-              1. ONLY include indices of candidates that are STRICTLY RELEVANT to the query.
-              2. If a candidate is not relevant, DO NOT include its index.
-              3. If no candidates are relevant, return an empty array.`
+              1. ONLY include candidates that are STRICTLY RELEVANT.
+              2. If a candidate is not relevant, DO NOT include them.
+              3. If no candidates are relevant, return an empty array in "ranked_results".`
             },
             {
               role: "user",
@@ -480,15 +488,19 @@ export async function POST(request: Request) {
         }, { timeout: 5000 });
 
         const rerankResult = JSON.parse(rerankCompletion.choices[0].message.content || '{}');
-        const rankedIndices = rerankResult.ranked_indices || [];
+        const rankedResults = rerankResult.ranked_results || [];
 
         const candidateMap = new Map(finalPool.map((c: any, i: number) => [i, c]));
         const reorderedCandidates: any[] = [];
 
         // Only include candidates explicitly selected by the AI
-        rankedIndices.forEach((index: number) => {
+        rankedResults.forEach((item: any) => {
+          const index = item.index;
           if (candidateMap.has(index)) {
-            reorderedCandidates.push(candidateMap.get(index));
+            const candidate = candidateMap.get(index);
+            // Append AI Reason to match_reason (or replace it for clarity)
+            candidate.match_reason = `AI Match: ${item.reason}`;
+            reorderedCandidates.push(candidate);
           }
         });
 

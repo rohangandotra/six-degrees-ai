@@ -222,8 +222,12 @@ export default function SearchPage() {
 
                                         <div className="flex flex-wrap gap-2 text-xs mb-3">
                                             {contact.match_reason && (
-                                                <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-md font-medium border border-emerald-500/10">
-                                                    {typeof contact.match_reason === 'string' ? contact.match_reason : 'Match'}
+                                                <span className={`px-2 py-1 rounded-md font-medium border flex items-center gap-1 ${contact.match_reason.startsWith('AI Match')
+                                                        ? 'bg-purple-500/10 text-purple-700 border-purple-500/20'
+                                                        : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/10'
+                                                    }`}>
+                                                    {contact.match_reason.startsWith('AI Match') && <Sparkles className="w-3 h-3" />}
+                                                    {contact.match_reason.replace('AI Match:', '').trim()}
                                                 </span>
                                             )}
                                             {contact.owner_name && (
