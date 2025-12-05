@@ -415,6 +415,8 @@ export async function POST(request: Request) {
 
 
     // D. LLM Reranking (High Precision)
+    let finalResults = finalPool;
+
     if (finalPool.length > 0 && query.length > 3) {
       try {
         const candidatesList = finalPool.map((c: any, index: number) =>
@@ -428,16 +430,9 @@ export async function POST(request: Request) {
               role: "system",
               content: `You are a precision ranking assistant.
               
-              Task: Rank the provided candidates based on relevance to the user's query.
-              Query: "${query}"
-              Purpose: ${purpose}
-              
-              Candidates:
-              ${candidatesList}
-              
-              Instructions:
-              1. Identify candidates that strictly match the query's intent.
-              2. Downrank candidates that are only tangentially related.
+              Task:
+              1. Analyze the query and the candidate list.
+              2. Select ONLY candidates that are strictly relevant to the query.
               3. Return a JSON object with an array of indices in order of relevance.
               
               Output Format: { "ranked_indices": [2, 0, 5] } 
@@ -445,6 +440,10 @@ export async function POST(request: Request) {
               1. ONLY include indices of candidates that are STRICTLY RELEVANT to the query.
               2. If a candidate is not relevant, DO NOT include its index.
               3. If no candidates are relevant, return an empty array.`
+            },
+            {
+              role: "user",
+              content: `Query: "${query}"\n\nCandidates:\n${candidatesList}`
             }
           ],
           response_format: { type: "json_object" },
@@ -453,7 +452,7 @@ export async function POST(request: Request) {
         const rerankResult = JSON.parse(rerankCompletion.choices[0].message.content || '{}');
         const rankedIndices = rerankResult.ranked_indices || [];
 
-        const candidateMap = new Map(candidates.map((c: any, i: number) => [i, c]));
+        const candidateMap = new Map(finalPool.map((c: any, i: number) => [i, c]));
         const reorderedCandidates: any[] = [];
 
         // Only include candidates explicitly selected by the AI
@@ -463,25 +462,14 @@ export async function POST(request: Request) {
           }
         });
 
-        // Optimization: If AI returns nothing (maybe API failure or strictness), 
-        // fallback to top 5 heuristic matches instead of returning nothing?
-        // No, user wants accuracy. If AI says "Zero matches", we should probably show zero 
-        // (or maybe the top 3 with a "Low Confidence" flag? For now, let's trust the AI).
-
-        // Actually, if reorderedCandidates is empty but we had candidates, it might look like a bug.
-        // Let's keep the top 3 original candidates as a "Safety Net" ONLY if the AI filtered EVERYTHING out,
-        // but label them? 
-        // No, the user complains about "Annie". "Annie" was likely in the heuristic top 50.
-        // If we remove the "Rest of the list", Annie disappears. THIS IS WHAT WE WANT.
-
-        candidates = reorderedCandidates;
+        finalResults = reorderedCandidates;
       } catch (rerankError) {
         console.error("Reranking failed:", rerankError);
       }
     }
 
     return NextResponse.json({
-      results: candidates,
+      results: finalResults,
       debug: {
         vectorCount: vectorResults.length,
         keywordCount: keywordResults.length,
