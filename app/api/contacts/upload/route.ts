@@ -187,6 +187,11 @@ export async function POST(request: Request) {
       if (contact.linkedin_url && existingMap.has(contact.linkedin_url)) {
         const existing = existingMap.get(contact.linkedin_url);
 
+        if (!existing) {
+          toInsert.push(contact);
+          return;
+        }
+
         // Smart Diff Check
         const nameChanged = (contact.full_name || '') !== (existing.full_name || '');
         const titleChanged = (contact.position || '') !== (existing.position || '');
