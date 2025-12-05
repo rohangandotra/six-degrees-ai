@@ -1,8 +1,26 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { DOMAIN_TO_COMPANY } from '@/lib/constants/company-domains'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/security'
+import OpenAI from 'openai'
+
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
+
+async function generateEmbedding(text: string) {
+  try {
+    const response = await openai.embeddings.create({
+      model: 'text-embedding-3-small',
+      input: text.replace(/\n/g, ' '),
+    })
+    return response.data[0].embedding
+  } catch (error) {
+    console.error('Embedding generation failed:', error)
+    return null
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -35,9 +53,6 @@ export async function POST(request: Request) {
         { status: 429 }
       )
     }
-
-    // Use authenticated client instead of admin client for security
-    // RLS policies must be in place to allow insert/upsert for own rows
 
     // 2. Parse Request Body (JSON)
     const body = await request.json()
@@ -89,64 +104,124 @@ export async function POST(request: Request) {
       }
     })
 
-    // 5. Manual Upsert (Check existing -> Insert/Update)
-    // Fetch existing contacts to check for duplicates
-    // We only care about linkedin_url for deduplication
-    const { data: existingContacts } = await supabase
-      .from('contacts')
-      .select('id, linkedin_url')
-      .eq('user_id', userId)
-      .not('linkedin_url', 'is', null)
+    // Helper to process embeddings and DB operations
+    const processWithEmbeddings = async (items: any[], operation: 'insert' | 'upsert') => {
+      const BATCH_SIZE = 50 // Smaller batch size due to embedding latency
 
-    const existingMap = new Map(
-      existingContacts?.map(c => [c.linkedin_url, c.id]) || []
-    )
-
-    const toInsert: any[] = []
-    const toUpdate: any[] = []
-
-    contactsToInsert.forEach((contact: any) => {
-      if (contact.linkedin_url && existingMap.has(contact.linkedin_url)) {
-        // Update existing
-        toUpdate.push({ ...contact, id: existingMap.get(contact.linkedin_url) })
-      } else {
-        // Insert new
-        toInsert.push(contact)
-      }
-    })
-
-    // Batch Processing Helper
-    const processBatch = async (items: any[], operation: 'insert' | 'upsert') => {
-      const BATCH_SIZE = 100
       for (let i = 0; i < items.length; i += BATCH_SIZE) {
         const batch = items.slice(i, i + BATCH_SIZE)
 
+        // Generate embeddings in parallel for the batch (Wait! Only if needed)
+        const enrichedBatch = await Promise.all(batch.map(async (contact) => {
+          // Optimization: Check if we really need to generate an embedding
+          // For NEW contacts (insert), yes always.
+          // For UPDATED contacts (upsert), only if fields changed.
+
+          let needsEmbedding = true;
+
+          if (operation === 'upsert' && contact.id) {
+            // Find existing contact data to compare
+            // Note: We might want to fetch this earlier in bulk if performance is critical,
+            // but for now, since we only have IDs in 'toUpdate', we rely on what we fetched before?
+            // Wait, 'existingMap' only has ID. We didn't fetch the semantic fields.
+            // To do this strictly, we need to fetch the existing semantic fields.
+            // Given the complexity of re-fetching, and that 'toUpdate' might be large,
+            // let's assume we re-embed on update for now to be safe, OR we implement a hash check.
+
+            // Actually, let's look at what we have.
+            // If the user is just syncing the same list, the incoming data matches the existing data.
+            // If we fetch existing data (name, company, position) we can compare.
+          }
+
+          // Let's implement the fetching optimization in the main flow before calling this helper.
+          // See logic change below outside this helper.
+
+          const textToEmbed = `
+            Name: ${contact.full_name}
+            Role: ${contact.position || 'Unknown'}
+            Company: ${contact.company || 'Unknown'}
+            Email: ${contact.email || ''}
+          `.trim()
+
+          // If the contact already has an embedding passed in (from optimization step), use it.
+          if (contact.embedding !== undefined) return contact;
+
+          const embedding = await generateEmbedding(textToEmbed)
+          return { ...contact, embedding }
+        }))
+
         let error
         if (operation === 'insert') {
-          const { error: err } = await supabase.from('contacts').insert(batch)
+          const { error: err } = await supabase.from('contacts').insert(enrichedBatch)
           error = err
         } else {
-          const { error: err } = await supabase.from('contacts').upsert(batch)
+          const { error: err } = await supabase.from('contacts').upsert(enrichedBatch)
           error = err
         }
 
         if (error) {
-          console.error(`Batch ${operation} error (rows ${i}-${i + BATCH_SIZE}):`, error)
+          console.error(`Batch ${operation} error:`, error)
           throw new Error(`${operation} failed: ${error.message}`)
         }
       }
     }
 
-    // Perform Inserts in Batches
+    // REFLECTION: To do the 'Smart Diff', we need the existing data.
+    // The previous select only got ID and LinkedIn URL.
+    // Let's update the fetch to get 'full_name', 'company', 'position', 'embedding' too.
+    const { data: existingContacts } = await supabase
+      .from('contacts')
+      .select('id, linkedin_url, full_name, company, position, embedding')
+      .eq('user_id', userId)
+      .not('linkedin_url', 'is', null)
+
+    const existingMap = new Map(
+      existingContacts?.map(c => [c.linkedin_url, c]) || []
+    )
+
+    const toInsert: any[] = []
+    const toUpdate: any[] = []
+    const toUpdateWithoutEmbeddingChange: any[] = []
+
+    contactsToInsert.forEach((contact: any) => {
+      if (contact.linkedin_url && existingMap.has(contact.linkedin_url)) {
+        const existing = existingMap.get(contact.linkedin_url);
+
+        // Smart Diff Check
+        const nameChanged = (contact.full_name || '') !== (existing.full_name || '');
+        const titleChanged = (contact.position || '') !== (existing.position || '');
+        const companyChanged = (contact.company || '') !== (existing.company || '');
+        const hasEmbedding = !!existing.embedding;
+
+        // If semantic fields match and we have an embedding, SKIP generation.
+        if (!nameChanged && !titleChanged && !companyChanged && hasEmbedding) {
+          // Push to a separate list or just mark it?
+          // We can just set 'embedding' to the existing one (or undefined if we don't want to touch it?)
+          // If we pass 'embedding: undefined' to upsert, does valid supabase ignore it? No, it might set to null if not careful.
+          // Better to pass the EXISTING embedding back so it persists, OR exclude it from the update payload.
+          // Excluding is harder with batching.
+          // Easiest: Re-use the existing embedding.
+          toUpdate.push({ ...contact, id: existing.id, embedding: existing.embedding })
+          // We will flag this so the helper knows not to call OpenAI.
+        } else {
+          // Needs new embedding
+          toUpdate.push({ ...contact, id: existing.id })
+        }
+      } else {
+        toInsert.push(contact)
+      }
+    })
+
+    // Perform Inserts
     if (toInsert.length > 0) {
-      console.log(`Inserting ${toInsert.length} new contacts...`)
-      await processBatch(toInsert, 'insert')
+      console.log(`Inserting ${toInsert.length} new contacts with embeddings...`)
+      await processWithEmbeddings(toInsert, 'insert')
     }
 
-    // Perform Updates in Batches
+    // Perform Updates
     if (toUpdate.length > 0) {
       console.log(`Updating ${toUpdate.length} existing contacts...`)
-      await processBatch(toUpdate, 'upsert')
+      await processWithEmbeddings(toUpdate, 'upsert')
     }
 
     return NextResponse.json({
