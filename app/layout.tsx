@@ -35,7 +35,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`font-sans antialiased`}>
+      <body className={`${_geist.variable} ${_geistMono.variable} font-sans antialiased`}>
         <CSPostHogProvider>
           <AuthHashHandler />
           {children}

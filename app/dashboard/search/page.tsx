@@ -155,7 +155,7 @@ export default function SearchPage() {
                     )}
 
                     {!isLoading && hasSearched && results.length === 0 && (
-                        <div className="text-center py-20 opacity-0 animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-forwards">
+                        <div className="text-center py-20">
                             <div className="inline-flex items-center justify-center p-6 rounded-full bg-muted mb-4">
                                 <Search className="w-10 h-10 text-muted-foreground" />
                             </div>
@@ -165,7 +165,7 @@ export default function SearchPage() {
                     )}
 
                     {!isLoading && results.length > 0 && (
-                        <div className="grid md:grid-cols-2 gap-4 opacity-0 animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-forwards text-left" style={{ animationDelay: '100ms' }}>
+                        <div className="grid md:grid-cols-2 gap-4 text-left">
                             {results.map((contact, i) => (
                                 <Card key={contact.id} className="group hover:shadow-lg transition-all duration-300 border-border/60 hover:border-primary/20">
                                     <CardContent className="p-5">
