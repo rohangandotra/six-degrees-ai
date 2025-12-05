@@ -8,8 +8,8 @@ import { CSPostHogProvider } from "@/providers/posthog-provider"
 import { CookieBanner } from "@/components/cookie-banner"
 import "./globals.css"
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const _geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
+const _geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
 export const metadata: Metadata = {
   title: "SixthDegree - Network Intelligence",

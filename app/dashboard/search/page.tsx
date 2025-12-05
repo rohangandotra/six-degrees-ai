@@ -38,7 +38,6 @@ export default function SearchPage() {
 
         setIsLoading(true)
         setResults([])
-        // Reset hasSearched only after we start a new valid search
         setHasSearched(false)
 
         try {
@@ -50,8 +49,6 @@ export default function SearchPage() {
                 },
                 body: JSON.stringify({ query, purpose, scope }),
             })
-
-            console.log("Search response status:", response.status)
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
@@ -69,8 +66,6 @@ export default function SearchPage() {
                 description: error.message,
                 variant: "destructive",
             })
-            // setHasSearched(true) so we show empty state if it failed? 
-            // Better to show error.
         } finally {
             setIsLoading(false)
         }
@@ -168,49 +163,47 @@ export default function SearchPage() {
                         </div>
                     )}
 
-                    {!isLoading && results && Array.isArray(results) && results.length > 0 && (
+                    {!isLoading && results && results.length > 0 && (
                         <div className="grid md:grid-cols-2 gap-4 text-left pb-20">
                             {results.map((contact, i) => (
-                                <div key={contact.id || i} className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div>
-                                            <h3 className="text-lg font-bold text-foreground line-clamp-1">{contact.full_name || 'Unknown Name'}</h3>
-                                            <div className="text-sm font-medium text-muted-foreground flex flex-col">
-                                                {contact.position && <span className="line-clamp-1">{contact.position}</span>}
-                                                {contact.company && <span className="line-clamp-1">{contact.company}</span>}
+                                <Card key={contact.id || i} className="group hover:shadow-md transition-all duration-200 border-border/60">
+                                    <CardContent className="p-5">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <h3 className="text-lg font-bold text-foreground line-clamp-1">{contact.full_name || 'Unknown Name'}</h3>
+                                                <div className="text-sm font-medium text-muted-foreground flex flex-col">
+                                                    {contact.position && <span className="line-clamp-1">{contact.position}</span>}
+                                                    {contact.company && <span className="line-clamp-1">{contact.company}</span>}
+                                                </div>
                                             </div>
+                                            {contact.linkedin_url && (
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 -mr-2" asChild>
+                                                    <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer">
+                                                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 21.227.792 22 1.771 22h20.451C23.2 22 24 21.227 24 20.271V1.729C24 .774 23.2 0 22.222 0h.003z" /></svg>
+                                                    </a>
+                                                </Button>
+                                            )}
                                         </div>
-                                        {contact.linkedin_url && (
-                                            <a
-                                                href={contact.linkedin_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center justify-center p-2 rounded-md hover:bg-blue-50 text-blue-600"
-                                            >
-                                                <span className="text-xs font-semibold">LinkedIn</span>
-                                            </a>
-                                        )}
-                                    </div>
 
-                                    {/* Badges */}
-                                    <div className="flex flex-wrap gap-2 text-xs mb-3">
-                                        {contact.match_reason && (
-                                            <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-md font-medium border border-emerald-500/10">
-                                                {typeof contact.match_reason === 'string' ? contact.match_reason.split('(')[0] : 'Match'}
-                                            </span>
-                                        )}
-                                        {contact.owner_name && (
-                                            <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-md border border-blue-500/10">
-                                                Via {contact.owner_name}
-                                            </span>
-                                        )}
-                                    </div>
+                                        <div className="flex flex-wrap gap-2 text-xs mb-3">
+                                            {contact.match_reason && (
+                                                <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-1 rounded-md font-medium border border-emerald-500/10">
+                                                    {typeof contact.match_reason === 'string' ? contact.match_reason.split('(')[0] : 'Match'}
+                                                </span>
+                                            )}
+                                            {contact.owner_name && (
+                                                <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1 rounded-md border border-blue-500/10">
+                                                    Via {contact.owner_name}
+                                                </span>
+                                            )}
+                                        </div>
 
-                                    <div className="pt-3 border-t border-border/50 flex flex-col gap-1.5 text-xs text-muted-foreground">
-                                        {contact.location && <div>📍 {contact.location}</div>}
-                                        {contact.email && <div>✉️ {contact.email}</div>}
-                                    </div>
-                                </div>
+                                        <div className="pt-3 border-t border-border/50 flex flex-col gap-1.5 text-xs text-muted-foreground">
+                                            {contact.location && <div className="flex items-center gap-2">📍 {contact.location}</div>}
+                                            {contact.email && <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5" /> {contact.email}</div>}
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             ))}
                         </div>
                     )}
