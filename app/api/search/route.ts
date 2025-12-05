@@ -351,15 +351,73 @@ export async function POST(request: Request) {
       }
     });
 
-    let candidates = Array.from(mergedMap.values())
-      .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 50); // Top 50 Hybrid Results
+    // --- Deduplication Logic ---
+    const candidates = Array.from(mergedMap.values())
+
+    // 1. Group by Normalized Name
+    const groups = new Map<string, any[]>();
+    candidates.forEach(c => {
+      const key = (c.full_name || '').toLowerCase().trim();
+      if (!key) return;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(c);
+    });
+
+    const uniqueCandidates: any[] = [];
+
+    groups.forEach((group) => {
+      if (group.length === 1) {
+        uniqueCandidates.push(group[0]);
+        return;
+      }
+
+      // Logic to pick the BEST candidate from duplicates
+      // Priority:
+      // 1. Has LinkedIn URL
+      // 2. Is Direct Connection (source === 'own')
+      // 3. Has Company/Position info
+      // 4. Highest Score
+
+      const best = group.reduce((prev, current) => {
+        const prevHasLinkedIn = !!prev.linkedin_url;
+        const currHasLinkedIn = !!current.linkedin_url;
+
+        if (prevHasLinkedIn && !currHasLinkedIn) return prev;
+        if (!prevHasLinkedIn && currHasLinkedIn) return current;
+
+        // If both have/don't have LinkedIn, prefer OWN source
+        const prevIsOwn = prev.source === 'own';
+        const currIsOwn = current.source === 'own';
+        if (prevIsOwn && !currIsOwn) return prev;
+        if (!prevIsOwn && currIsOwn) return current;
+
+        // If equal on Source, prefer richer metadata
+        const prevScore = (prev.company ? 1 : 0) + (prev.position ? 1 : 0);
+        const currScore = (current.company ? 1 : 0) + (current.position ? 1 : 0);
+
+        if (prevScore > currScore) return prev;
+        if (currScore > prevScore) return current;
+
+        // Fallback to Search Score
+        return prev.score > current.score ? prev : current;
+      });
+
+      // Merge metadata if possible? (e.g. if winner is missing email but loser has it)
+      // For simplicity, just take the best record.
+      uniqueCandidates.push(best);
+    });
+
+    // Sort by score again
+    uniqueCandidates.sort((a, b) => b.score - a.score);
+
+    // Slice top 50 for Reranking
+    let finalPool = uniqueCandidates.slice(0, 50);; // Top 50 Hybrid Results
 
 
     // D. LLM Reranking (High Precision)
-    if (candidates.length > 0 && query.length > 3) {
+    if (finalPool.length > 0 && query.length > 3) {
       try {
-        const candidatesList = candidates.map((c: any, index: number) =>
+        const candidatesList = finalPool.map((c: any, index: number) =>
           `${index}. ${c.full_name} | ${c.position} at ${c.company}`
         ).join('\n');
 
