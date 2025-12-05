@@ -4,7 +4,7 @@ import type React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { LayoutDashboard, Users, Network, Settings, LogOut, Menu, X } from "lucide-react"
+import { LayoutDashboard, Users, Network, Settings, LogOut, Menu, X, Search } from "lucide-react"
 import { useState, useEffect } from "react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
@@ -37,6 +37,7 @@ export default function DashboardLayout({
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard/search", label: "Search", icon: Search },
     { href: "/dashboard/contacts", label: "Contacts", icon: Users },
     { href: "/dashboard/network", label: "Extended Network", icon: Network },
     { href: "/dashboard/settings", label: "Settings", icon: Settings },
