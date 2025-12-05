@@ -291,7 +291,7 @@ export async function POST(request: Request) {
 
     // Perform Keyword Scoring
     const queryLower = query.toLowerCase();
-    const queryKeywords = queryLower.split(/\s+/).filter((w: string) => w.length > 2 && !['who', 'works', 'in', 'the', 'and', 'for', 'with'].includes(w));
+    const queryKeywords = queryLower.split(/\s+/).filter((w: string) => w.length > 2 && !['who', 'works', 'in', 'the', 'and', 'for', 'with', 'find', 'people', 'show', 'me'].includes(w));
 
     const keywordResults = allKeywordCandidates.map((contact: any) => {
       let score = 0;
