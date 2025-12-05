@@ -177,24 +177,45 @@ export async function POST(request: Request) {
 
     // 0. Gather Search Scope (User IDs)
     const searchUserIds = [userId]; // Always include self
+    const ownerNameMap = new Map<string, string>();
+    ownerNameMap.set(userId, 'You');
 
     if (scope === 'extended') {
       const { data: asRequester } = await adminSupabase
         .from('user_connections')
-        .select('connected_user_id, accepter_shares_network')
+        .select(`connected_user_id, accepter_shares_network, connected_user:users!user_connections_connected_user_id_fkey(full_name)`)
         .eq('user_id', userId)
         .eq('status', 'accepted')
         .eq('accepter_shares_network', true)
 
       const { data: asAccepter } = await adminSupabase
         .from('user_connections')
-        .select('user_id, requester_shares_network')
+        .select(`user_id, requester_shares_network, requester:users!user_connections_user_id_fkey(full_name)`)
         .eq('connected_user_id', userId)
         .eq('status', 'accepted')
         .eq('requester_shares_network', true)
 
-      if (asRequester) searchUserIds.push(...asRequester.map((c: any) => c.connected_user_id));
-      if (asAccepter) searchUserIds.push(...asAccepter.map((c: any) => c.user_id));
+      if (asRequester) {
+        asRequester.forEach((c: any) => {
+          if (c.connected_user_id) {
+            searchUserIds.push(c.connected_user_id);
+            if (c.connected_user?.full_name) {
+              ownerNameMap.set(c.connected_user_id, c.connected_user.full_name);
+            }
+          }
+        });
+      }
+
+      if (asAccepter) {
+        asAccepter.forEach((c: any) => {
+          if (c.user_id) {
+            searchUserIds.push(c.user_id);
+            if (c.requester?.full_name) {
+              ownerNameMap.set(c.user_id, c.requester.full_name);
+            }
+          }
+        });
+      }
     }
 
     // Sanitize user IDs
@@ -219,6 +240,8 @@ export async function POST(request: Request) {
           vectorResults = semanticMatches.map((c: any) => ({
             ...c,
             source: c.user_id === userId ? 'own' : 'shared',
+            owner_name: ownerNameMap.get(c.user_id) || 'Extended Network',
+            owner_id: c.user_id,
             match_reason: `Semantic match (${Math.round(c.similarity * 100)}%)`,
             score: c.similarity * 500
           }))
