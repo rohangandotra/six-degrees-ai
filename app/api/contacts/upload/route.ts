@@ -167,16 +167,20 @@ export async function POST(request: Request) {
     }
 
     // REFLECTION: To do the 'Smart Diff', we need the existing data.
-    // The previous select only got ID and LinkedIn URL.
-    // Let's update the fetch to get 'full_name', 'company', 'position', 'embedding' too.
+    // Update fetch to get ALL contacts for checking duplicates by name too.
     const { data: existingContacts } = await supabase
       .from('contacts')
       .select('id, linkedin_url, full_name, company, position, embedding')
       .eq('user_id', userId)
-      .not('linkedin_url', 'is', null)
 
+    // Primary Map: LinkedIn URL
     const existingMap = new Map(
-      existingContacts?.map(c => [c.linkedin_url, c]) || []
+      existingContacts?.filter(c => c.linkedin_url).map(c => [c.linkedin_url, c]) || []
+    )
+
+    // Secondary Map: Normalized Name (Fallback)
+    const nameMap = new Map(
+      existingContacts?.filter(c => c.full_name).map(c => [c.full_name.trim().toLowerCase(), c]) || []
     )
 
     const toInsert: any[] = []
@@ -184,13 +188,22 @@ export async function POST(request: Request) {
     const toUpdateWithoutEmbeddingChange: any[] = []
 
     contactsToInsert.forEach((contact: any) => {
-      if (contact.linkedin_url && existingMap.has(contact.linkedin_url)) {
-        const existing = existingMap.get(contact.linkedin_url);
+      let existing = null;
 
-        if (!existing) {
-          toInsert.push(contact);
-          return;
+      // 1. Try LinkedIn Match
+      if (contact.linkedin_url && existingMap.has(contact.linkedin_url)) {
+        existing = existingMap.get(contact.linkedin_url);
+      }
+      // 2. Try Name Match (Fallback)
+      else if (contact.full_name) {
+        const key = contact.full_name.trim().toLowerCase();
+        if (nameMap.has(key)) {
+          existing = nameMap.get(key);
         }
+      }
+
+      if (existing) {
+        // Found existing contact! check for updates.
 
         // Smart Diff Check
         const nameChanged = (contact.full_name || '') !== (existing.full_name || '');
@@ -198,18 +211,15 @@ export async function POST(request: Request) {
         const companyChanged = (contact.company || '') !== (existing.company || '');
         const hasEmbedding = !!existing.embedding;
 
+        // Check if we found it by Name but incoming has LinkedIn (Enrichment)
+        const newLinkedIn = contact.linkedin_url && !existing.linkedin_url;
+
         // If semantic fields match and we have an embedding, SKIP generation.
-        if (!nameChanged && !titleChanged && !companyChanged && hasEmbedding) {
-          // Push to a separate list or just mark it?
-          // We can just set 'embedding' to the existing one (or undefined if we don't want to touch it?)
-          // If we pass 'embedding: undefined' to upsert, does valid supabase ignore it? No, it might set to null if not careful.
-          // Better to pass the EXISTING embedding back so it persists, OR exclude it from the update payload.
-          // Excluding is harder with batching.
-          // Easiest: Re-use the existing embedding.
+        if (!nameChanged && !titleChanged && !companyChanged && hasEmbedding && !newLinkedIn) {
+          // Pass existing embedding back to avoid generation
           toUpdate.push({ ...contact, id: existing.id, embedding: existing.embedding })
-          // We will flag this so the helper knows not to call OpenAI.
         } else {
-          // Needs new embedding
+          // Needs update (either semantic change or new LinkedIn linked)
           toUpdate.push({ ...contact, id: existing.id })
         }
       } else {
