@@ -106,7 +106,7 @@ async function expandQueryWithAI(query: string, purpose: string) {
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini", // Restored as requested
+      model: "gpt-4o-mini", // Reverted to valid key
       messages: [
         {
           role: "system",
@@ -454,7 +454,7 @@ export async function POST(request: Request) {
         ).join('\n');
 
         const rerankCompletion = await openai.chat.completions.create({
-          model: "gpt-5-mini",
+          model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
