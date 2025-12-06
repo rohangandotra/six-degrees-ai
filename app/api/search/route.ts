@@ -106,7 +106,7 @@ async function expandQueryWithAI(query: string, purpose: string) {
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Reverted to valid key
+      model: "gpt-4o", // High-intellect model
       messages: [
         {
           role: "system",
@@ -443,6 +443,10 @@ export async function POST(request: Request) {
     // Slice top 50 for Reranking
     let finalPool = uniqueCandidates.slice(0, 50);; // Top 50 Hybrid Results
 
+    // DEBUG: Check for LinkedIn URLs in the pool
+    const debugLinkedIn = finalPool.filter(c => c.linkedin_url).length;
+    console.log(`📊 Hybrid Pool: ${finalPool.length} candidates. ${debugLinkedIn} have LinkedIn URLs.`);
+
 
     // D. LLM Reranking (High Precision)
     let finalResults = finalPool;
@@ -453,8 +457,10 @@ export async function POST(request: Request) {
           `${index}. ${c.full_name} | ${c.position} at ${c.company}`
         ).join('\n');
 
+        console.log(`🧠 Reranking ${finalPool.length} candidates with GPT-4o...`);
+
         const rerankCompletion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
+          model: "gpt-4o",
           messages: [
             {
               role: "system",
@@ -485,7 +491,7 @@ export async function POST(request: Request) {
             }
           ],
           response_format: { type: "json_object" },
-        }, { timeout: 5000 });
+        }, { timeout: 15000 }); // Increased timeout for heavier model
 
         const rerankResult = JSON.parse(rerankCompletion.choices[0].message.content || '{}');
         const rankedResults = rerankResult.ranked_results || [];
@@ -505,8 +511,9 @@ export async function POST(request: Request) {
         });
 
         finalResults = reorderedCandidates;
-      } catch (rerankError) {
-        console.error("Reranking failed:", rerankError);
+      } catch (rerankError: any) {
+        console.error("❌ Reranking failed:", rerankError.message, rerankError);
+        // Fallback to pool if rerank fails, but we should log WHY
       }
     }
 
