@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     ).join('\n');
 
     const result = streamText({
-        model: openai('gpt-4o'),
+        model: openai('gpt-5-mini'),
         system: `You are a helpful network assistant. 
     Summarize the following search results for the user's query.
     Be concise (2-3 sentences max). 

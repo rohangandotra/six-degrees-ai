@@ -106,7 +106,7 @@ async function expandQueryWithAI(query: string, purpose: string) {
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o", // High-intellect model
+      model: "gpt-5-mini", // Restored as requested
       messages: [
         {
           role: "system",
@@ -457,10 +457,10 @@ export async function POST(request: Request) {
           `${index}. ${c.full_name} | ${c.position} at ${c.company}`
         ).join('\n');
 
-        console.log(`🧠 Reranking ${finalPool.length} candidates with GPT-4o...`);
+        console.log(`🧠 Reranking ${finalPool.length} candidates with GPT-5-Mini...`);
 
         const rerankCompletion = await openai.chat.completions.create({
-          model: "gpt-4o",
+          model: "gpt-5-mini",
           messages: [
             {
               role: "system",
