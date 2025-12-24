@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -9,20 +9,8 @@ import { Search, Loader2, Mail, Sparkles } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getApiUrl } from "@/lib/api-config"
 import { useCompletion } from "@ai-sdk/react"
-
-interface Contact {
-    id: string
-    full_name: string
-    email?: string
-    company?: string
-    position?: string
-    linkedin_url?: string
-    location?: string
-    keywords?: string[]
-    match_reason?: string
-    source?: 'own' | 'shared'
-    owner_name?: string
-}
+import { ContactDrawer, Contact } from "@/components/contact-drawer"
+import { createClient } from "@/lib/supabase/client"
 
 export default function SearchPage() {
     const [query, setQuery] = useState("")
@@ -31,12 +19,40 @@ export default function SearchPage() {
     const [results, setResults] = useState<Contact[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [hasSearched, setHasSearched] = useState(false)
+    const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+    const [userProfile, setUserProfile] = useState<{ full_name: string; position?: string; company?: string } | undefined>()
     const { toast } = useToast()
 
     // Streaming AI Answer
     const { complete, completion, isLoading: isStreaming, stop } = useCompletion({
         api: getApiUrl("/api/search/answer"),
     })
+
+    // Fetch user profile on mount
+    useEffect(() => {
+        async function fetchProfile() {
+            const supabase = createClient()
+            if (!supabase) return
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                const { data } = await supabase
+                    .from('users')
+                    .select('full_name, position, company')
+                    .eq('id', user.id)
+                    .single()
+                if (data) {
+                    setUserProfile(data)
+                }
+            }
+        }
+        fetchProfile()
+    }, [])
+
+    const handleContactClick = (contact: Contact) => {
+        setSelectedContact(contact)
+        setIsDrawerOpen(true)
+    }
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -201,7 +217,11 @@ export default function SearchPage() {
                     {!isLoading && results && results.length > 0 && (
                         <div className="grid md:grid-cols-2 gap-4 text-left pb-20">
                             {results.map((contact, i) => (
-                                <Card key={contact.id || i} className="group hover:shadow-md transition-all duration-200 border-border/60">
+                                <Card
+                                    key={contact.id || i}
+                                    className="group hover:shadow-md transition-all duration-200 border-border/60 cursor-pointer"
+                                    onClick={() => handleContactClick(contact)}
+                                >
                                     <CardContent className="p-5">
                                         <div className="flex justify-between items-start mb-3">
                                             <div>
@@ -248,6 +268,15 @@ export default function SearchPage() {
                     )}
                 </div>
             </div>
+
+            {/* Contact Drawer */}
+            <ContactDrawer
+                contact={selectedContact}
+                isOpen={isDrawerOpen}
+                onClose={() => setIsDrawerOpen(false)}
+                searchPurpose={purpose}
+                userProfile={userProfile}
+            />
         </div>
     )
 }
