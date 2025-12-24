@@ -7,12 +7,17 @@ import {
     SheetHeader,
     SheetTitle,
 } from "@/components/ui/sheet"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { Loader2, Copy, ExternalLink, RefreshCw, ArrowLeft, MapPin, Mail, Check, Users, MessageSquare } from "lucide-react"
+import { Loader2, Copy, RefreshCw, ArrowLeft, MapPin, Mail, Check, Users, MessageSquare, X, Sparkles } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 // LinkedIn icon component
@@ -21,6 +26,18 @@ const LinkedInIcon = ({ className }: { className?: string }) => (
         <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 21.227.792 22 1.771 22h20.451C23.2 22 24 21.227 24 20.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
     </svg>
 )
+
+// Initials Avatar component
+const InitialsAvatar = ({ name, size = "lg" }: { name: string; size?: "sm" | "lg" }) => {
+    const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    const sizeClasses = size === "lg" ? "w-16 h-16 text-xl" : "w-10 h-10 text-sm"
+
+    return (
+        <div className={`${sizeClasses} rounded-full bg-gradient-to-br from-primary/80 to-primary flex items-center justify-center text-primary-foreground font-semibold shadow-lg`}>
+            {initials}
+        </div>
+    )
+}
 
 export interface Contact {
     id: string
@@ -48,7 +65,7 @@ interface ContactDrawerProps {
     contact: Contact | null
     isOpen: boolean
     onClose: () => void
-    searchPurpose: string // Pre-filled from search
+    searchPurpose: string
     userProfile?: {
         full_name: string
         position?: string
@@ -123,7 +140,6 @@ export function ContactDrawer({
             setMessage('')
             setCopied(false)
 
-            // If it's a shared contact, fetch connector info
             if (contact.source === 'shared' && contact.owner_id) {
                 fetchConnectorInfo(contact.owner_id)
             } else {
@@ -132,7 +148,6 @@ export function ContactDrawer({
         }
     }, [contact, searchPurpose])
 
-    // Set default angle when purpose changes
     useEffect(() => {
         const options = ANGLE_OPTIONS[purpose] || ANGLE_OPTIONS.any
         if (options.length > 0 && !angle) {
@@ -201,8 +216,13 @@ export function ContactDrawer({
     const handlePathSelect = (path: MessagePath) => {
         setMessagePath(path)
         setViewState('compose-message')
-        // Auto-generate on path selection
         setTimeout(generateMessage, 100)
+    }
+
+    const handleBackToPathSelect = () => {
+        setViewState('select-path')
+        setMessagePath(null)
+        setMessage('')
     }
 
     const handleCopy = async () => {
@@ -222,181 +242,223 @@ export function ContactDrawer({
         }
     }
 
+    const handleClose = () => {
+        onClose()
+        // Reset state after animation
+        setTimeout(() => {
+            setViewState('select-path')
+            setMessagePath(null)
+        }, 300)
+    }
+
     const isOwnContact = contact?.source === 'own' || !contact?.owner_name
 
     if (!contact) return null
 
-    return (
-        <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
-                <SheetHeader className="pb-4 border-b">
-                    {viewState === 'compose-message' && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-fit -ml-2 mb-2"
-                            onClick={() => setViewState('select-path')}
-                        >
-                            <ArrowLeft className="w-4 h-4 mr-1" />
-                            Back
-                        </Button>
-                    )}
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <SheetTitle className="text-xl">{contact.full_name}</SheetTitle>
-                            <div className="text-sm text-muted-foreground mt-1">
-                                {contact.position && <div>{contact.position}</div>}
-                                {contact.company && <div className="font-medium">{contact.company}</div>}
+    // PATH SELECTION VIEW - Compact drawer on the right
+    if (viewState === 'select-path') {
+        return (
+            <Sheet open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+                <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto p-0">
+                    {/* Header with avatar */}
+                    <div className="p-6 pb-4 border-b bg-gradient-to-br from-muted/30 to-transparent">
+                        <div className="flex gap-4">
+                            <InitialsAvatar name={contact.full_name} size="lg" />
+                            <div className="flex-1 min-w-0">
+                                <SheetTitle className="text-2xl font-bold tracking-tight">
+                                    {contact.full_name}
+                                </SheetTitle>
+                                <div className="mt-1 space-y-0.5">
+                                    {contact.position && (
+                                        <p className="text-sm text-muted-foreground truncate">{contact.position}</p>
+                                    )}
+                                    {contact.company && (
+                                        <p className="text-sm font-medium text-foreground/80">{contact.company}</p>
+                                    )}
+                                </div>
+
+                                {/* Meta info */}
+                                <div className="flex flex-wrap gap-3 mt-3 text-xs text-muted-foreground">
+                                    {contact.location && (
+                                        <span className="flex items-center gap-1">
+                                            <MapPin className="w-3 h-3" />
+                                            {contact.location}
+                                        </span>
+                                    )}
+                                    {contact.linkedin_url && (
+                                        <a
+                                            href={contact.linkedin_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium"
+                                        >
+                                            <LinkedInIcon className="w-3 h-3" />
+                                            Profile
+                                        </a>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                        {contact.linkedin_url && (
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                asChild
-                            >
-                                <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer">
-                                    <LinkedInIcon className="w-5 h-5" />
-                                </a>
-                            </Button>
-                        )}
                     </div>
 
-                    {/* Contact Meta */}
-                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-2">
-                        {contact.location && (
-                            <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3" />
-                                {contact.location}
-                            </span>
-                        )}
-                        {contact.email && (
-                            <span className="flex items-center gap-1">
-                                <Mail className="w-3 h-3" />
-                                {contact.email}
-                            </span>
-                        )}
-                    </div>
-                </SheetHeader>
-
-                {/* Connector Card - Only for shared contacts */}
-                {!isOwnContact && (
-                    <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <div className="flex items-center gap-2 text-sm">
-                            <Users className="w-4 h-4 text-blue-600" />
-                            <span className="text-blue-800 dark:text-blue-200 font-medium">
-                                Connected via
-                            </span>
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                            <div>
-                                <div className="font-medium text-blue-900 dark:text-blue-100">
-                                    {connector?.full_name || contact.owner_name}
+                    {/* Connection Path - Only for shared contacts */}
+                    {!isOwnContact && (
+                        <div className="mx-6 mt-4 p-4 bg-gradient-to-r from-blue-500/10 to-blue-600/5 rounded-xl border border-blue-200/50 dark:border-blue-800/50">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="p-1.5 bg-blue-500/20 rounded-lg">
+                                    <Users className="w-4 h-4 text-blue-600" />
                                 </div>
-                                {connector?.position && (
-                                    <div className="text-xs text-blue-700 dark:text-blue-300">
-                                        {connector.position}
-                                        {connector.company && ` @ ${connector.company}`}
-                                    </div>
+                                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                                    Connected via
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="font-semibold text-blue-900 dark:text-blue-100">
+                                        {connector?.full_name || contact.owner_name}
+                                    </p>
+                                    {connector?.position && (
+                                        <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
+                                            {connector.position}
+                                            {connector.company && ` @ ${connector.company}`}
+                                        </p>
+                                    )}
+                                </div>
+                                {connector?.linkedin_url && (
+                                    <a
+                                        href={connector.linkedin_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 hover:text-blue-700"
+                                    >
+                                        <LinkedInIcon className="w-5 h-5" />
+                                    </a>
                                 )}
                             </div>
-                            {connector?.linkedin_url && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-blue-600 hover:text-blue-700 h-8"
-                                    asChild
-                                >
-                                    <a href={connector.linkedin_url} target="_blank" rel="noopener noreferrer">
-                                        <LinkedInIcon className="w-4 h-4 mr-1" />
-                                        View
-                                    </a>
-                                </Button>
-                            )}
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {/* Path Selection View */}
-                {viewState === 'select-path' && (
-                    <div className="mt-6 space-y-4">
-                        <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+                    {/* Path Selection */}
+                    <div className="p-6 space-y-4">
+                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                             How would you like to connect?
                         </h3>
 
                         {/* Direct Message Option */}
                         <button
                             onClick={() => handlePathSelect('direct')}
-                            className="w-full p-4 text-left border rounded-lg hover:border-primary hover:bg-primary/5 transition-all group"
+                            className="w-full p-5 text-left rounded-xl border-2 border-transparent bg-muted/30 hover:bg-primary/5 hover:border-primary/50 transition-all duration-200 group"
                         >
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
-                                    <MessageSquare className="w-5 h-5 text-primary" />
+                            <div className="flex items-start gap-4">
+                                <div className="p-3 bg-primary/10 rounded-xl group-hover:bg-primary/20 transition-colors">
+                                    <MessageSquare className="w-6 h-6 text-primary" />
                                 </div>
                                 <div>
-                                    <div className="font-medium">Message {contact.full_name.split(' ')[0]} Directly</div>
-                                    <div className="text-sm text-muted-foreground">
+                                    <p className="font-semibold text-lg">Message Directly</p>
+                                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
                                         {isOwnContact
                                             ? "Reach out to your direct contact"
-                                            : `"Hey, I noticed we're connected through ${connector?.full_name || contact.owner_name}..."`
+                                            : `"Hey, I noticed we're connected through ${(connector?.full_name || contact.owner_name || "").split(' ')[0]}..."`
                                         }
-                                    </div>
+                                    </p>
                                 </div>
                             </div>
                         </button>
 
-                        {/* Intro Request Option - Only for shared contacts */}
+                        {/* Intro Request Option */}
                         {!isOwnContact && (
                             <button
                                 onClick={() => handlePathSelect('intro')}
-                                className="w-full p-4 text-left border rounded-lg hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all group"
+                                className="w-full p-5 text-left rounded-xl border-2 border-transparent bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100/50 dark:hover:bg-blue-950/40 hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-200 group"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-800 transition-colors">
-                                        <Users className="w-5 h-5 text-blue-600" />
+                                <div className="flex items-start gap-4">
+                                    <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-xl group-hover:bg-blue-200 dark:group-hover:bg-blue-800/50 transition-colors">
+                                        <Users className="w-6 h-6 text-blue-600" />
                                     </div>
                                     <div>
-                                        <div className="font-medium">Ask {connector?.full_name || contact.owner_name} for an Intro</div>
-                                        <div className="text-sm text-muted-foreground">
-                                            "Hey {(connector?.full_name || contact.owner_name || '').split(' ')[0]}, could you introduce me to {contact.full_name.split(' ')[0]}?"
-                                        </div>
+                                        <p className="font-semibold text-lg">Request an Introduction</p>
+                                        <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                                            Ask {(connector?.full_name || contact.owner_name || "").split(' ')[0]} to introduce you
+                                        </p>
                                     </div>
                                 </div>
                             </button>
                         )}
 
-                        <div className="pt-4 text-center">
-                            <p className="text-xs text-muted-foreground">
-                                💡 Warm introductions have 3x higher response rates
+                        <div className="pt-2 text-center">
+                            <p className="text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                                <Sparkles className="w-3 h-3" />
+                                Warm intros have 3x higher response rates
                             </p>
                         </div>
                     </div>
-                )}
+                </SheetContent>
+            </Sheet>
+        )
+    }
 
-                {/* Message Composition View */}
-                {viewState === 'compose-message' && (
-                    <div className="mt-6 space-y-5">
-                        {/* Message Target Header */}
-                        <div className="p-3 bg-muted/50 rounded-lg">
-                            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                                {messagePath === 'intro' ? 'Requesting intro to' : 'Messaging'}
-                            </div>
-                            <div className="font-medium">
+    // COMPOSE MESSAGE VIEW - Centered modal with more space
+    return (
+        <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+                {/* Header */}
+                <div className="sticky top-0 z-10 bg-background border-b px-6 py-4">
+                    <div className="flex items-center gap-4">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={handleBackToPathSelect}
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </Button>
+                        <div className="flex-1 min-w-0">
+                            <DialogTitle className="text-lg font-semibold">
+                                {messagePath === 'intro' ? 'Request Introduction' : 'Compose Message'}
+                            </DialogTitle>
+                            <p className="text-sm text-muted-foreground truncate">
                                 {messagePath === 'intro'
-                                    ? `${contact.full_name} via ${connector?.full_name || contact.owner_name}`
-                                    : contact.full_name
+                                    ? `To ${contact.full_name} via ${connector?.full_name || contact.owner_name}`
+                                    : `To ${contact.full_name}`
                                 }
-                            </div>
+                            </p>
                         </div>
+                        <InitialsAvatar name={messagePath === 'intro' ? (connector?.full_name || contact.owner_name || contact.full_name) : contact.full_name} size="sm" />
+                    </div>
+                </div>
 
-                        {/* Goal Selector */}
+                {/* Body */}
+                <div className="p-6 space-y-6">
+                    {/* Quick Info Card */}
+                    <div className="flex gap-4 p-4 rounded-xl bg-muted/30 border">
+                        <InitialsAvatar name={contact.full_name} size="sm" />
+                        <div className="flex-1 min-w-0">
+                            <p className="font-semibold">{contact.full_name}</p>
+                            <p className="text-sm text-muted-foreground truncate">
+                                {contact.position}{contact.company && ` @ ${contact.company}`}
+                            </p>
+                        </div>
+                        {contact.linkedin_url && (
+                            <a
+                                href={contact.linkedin_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-700 self-center"
+                            >
+                                <LinkedInIcon className="w-5 h-5" />
+                            </a>
+                        )}
+                    </div>
+
+                    {/* Two-column layout for settings */}
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        {/* Goal */}
                         <div className="space-y-2">
-                            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                                 Your Goal
                             </Label>
                             <Select value={purpose} onValueChange={setPurpose}>
-                                <SelectTrigger>
+                                <SelectTrigger className="h-12">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -407,87 +469,99 @@ export function ContactDrawer({
                             </Select>
                         </div>
 
-                        {/* Angle Selector */}
-                        <div className="space-y-3">
-                            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {/* Angle */}
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                                 Your Angle
                             </Label>
-                            <RadioGroup value={angle} onValueChange={setAngle} className="space-y-2">
-                                {(ANGLE_OPTIONS[purpose] || ANGLE_OPTIONS.any).map((option) => (
-                                    <div key={option.value} className="flex items-center space-x-2">
-                                        <RadioGroupItem value={option.value} id={option.value} />
-                                        <Label htmlFor={option.value} className="font-normal cursor-pointer">
+                            <Select value={angle} onValueChange={setAngle}>
+                                <SelectTrigger className="h-12">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {(ANGLE_OPTIONS[purpose] || ANGLE_OPTIONS.any).map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
                                             {option.label}
-                                        </Label>
-                                    </div>
-                                ))}
-                            </RadioGroup>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    {/* Message Editor */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                                Your Message
+                            </Label>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={generateMessage}
+                                disabled={isGenerating}
+                                className="h-8 text-xs gap-1.5"
+                            >
+                                <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
+                                Regenerate
+                            </Button>
                         </div>
 
-                        {/* Message Editor */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                    Your Message
-                                </Label>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={generateMessage}
-                                    disabled={isGenerating}
-                                    className="h-7 text-xs"
-                                >
-                                    <RefreshCw className={`w-3 h-3 mr-1 ${isGenerating ? 'animate-spin' : ''}`} />
-                                    Regenerate
-                                </Button>
+                        {isGenerating ? (
+                            <div className="h-64 flex flex-col items-center justify-center rounded-xl bg-muted/30 border-2 border-dashed">
+                                <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
+                                <p className="text-sm text-muted-foreground">Crafting your message...</p>
                             </div>
-
-                            {isGenerating ? (
-                                <div className="h-48 flex items-center justify-center border rounded-md bg-muted/30">
-                                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                                </div>
-                            ) : (
+                        ) : (
+                            <div className="relative">
                                 <Textarea
                                     value={message}
                                     onChange={(e) => setMessage(e.target.value)}
                                     placeholder="Your personalized message will appear here..."
-                                    className="min-h-[200px] resize-none"
+                                    className="min-h-[240px] resize-none text-base leading-relaxed p-4 rounded-xl"
                                 />
-                            )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2 pt-2">
-                            <Button
-                                onClick={handleCopy}
-                                disabled={!message}
-                                className="flex-1"
-                                variant="outline"
-                            >
-                                {copied ? (
-                                    <>
-                                        <Check className="w-4 h-4 mr-2" />
-                                        Copied!
-                                    </>
-                                ) : (
-                                    <>
-                                        <Copy className="w-4 h-4 mr-2" />
-                                        Copy Message
-                                    </>
-                                )}
-                            </Button>
-                            <Button
-                                onClick={handleOpenLinkedIn}
-                                disabled={messagePath === 'intro' ? !connector?.linkedin_url : !contact.linkedin_url}
-                                className="flex-1"
-                            >
-                                <LinkedInIcon className="w-4 h-4 mr-2" />
-                                Open LinkedIn
-                            </Button>
-                        </div>
+                                <div className="absolute bottom-3 right-3 text-xs text-muted-foreground">
+                                    {message.length} characters
+                                </div>
+                            </div>
+                        )}
                     </div>
-                )}
-            </SheetContent>
-        </Sheet>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="sticky bottom-0 bg-background border-t p-4">
+                    <div className="flex gap-3">
+                        <Button
+                            onClick={handleCopy}
+                            disabled={!message}
+                            variant="outline"
+                            size="lg"
+                            className="flex-1 h-12"
+                        >
+                            {copied ? (
+                                <>
+                                    <Check className="w-5 h-5 mr-2" />
+                                    Copied!
+                                </>
+                            ) : (
+                                <>
+                                    <Copy className="w-5 h-5 mr-2" />
+                                    Copy Message
+                                </>
+                            )}
+                        </Button>
+                        <Button
+                            onClick={handleOpenLinkedIn}
+                            disabled={messagePath === 'intro' ? !connector?.linkedin_url : !contact.linkedin_url}
+                            size="lg"
+                            className="flex-1 h-12 bg-[#0A66C2] hover:bg-[#004182]"
+                        >
+                            <LinkedInIcon className="w-5 h-5 mr-2" />
+                            Open LinkedIn
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
     )
 }
