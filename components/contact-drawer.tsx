@@ -398,11 +398,26 @@ export function ContactDrawer({
     }
 
     // COMPOSE MESSAGE VIEW - Centered modal with more space
+    // Determine who we're actually messaging
+    const messageRecipient = messagePath === 'intro'
+        ? {
+            name: connector?.full_name || contact.owner_name || '',
+            position: connector?.position,
+            company: connector?.company,
+            linkedin_url: connector?.linkedin_url
+        }
+        : {
+            name: contact.full_name,
+            position: contact.position,
+            company: contact.company,
+            linkedin_url: contact.linkedin_url
+        }
+
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+            <DialogContent className="max-w-2xl w-[95vw] max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0">
                 {/* Header */}
-                <div className="sticky top-0 z-10 bg-background border-b px-6 py-4">
+                <div className="shrink-0 bg-background border-b px-6 py-4">
                     <div className="flex items-center gap-4">
                         <Button
                             variant="ghost"
@@ -418,29 +433,32 @@ export function ContactDrawer({
                             </DialogTitle>
                             <p className="text-sm text-muted-foreground truncate">
                                 {messagePath === 'intro'
-                                    ? `To ${contact.full_name} via ${connector?.full_name || contact.owner_name}`
-                                    : `To ${contact.full_name}`
+                                    ? `Asking ${connector?.full_name || contact.owner_name} to introduce you to ${contact.full_name}`
+                                    : `Messaging ${contact.full_name}`
                                 }
                             </p>
                         </div>
-                        <InitialsAvatar name={messagePath === 'intro' ? (connector?.full_name || contact.owner_name || contact.full_name) : contact.full_name} size="sm" />
+                        <InitialsAvatar name={messageRecipient.name} size="sm" />
                     </div>
                 </div>
 
-                {/* Body */}
-                <div className="p-6 space-y-6">
-                    {/* Quick Info Card */}
+                {/* Body - scrollable */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* Message Recipient Card - who you're actually messaging */}
                     <div className="flex gap-4 p-4 rounded-xl bg-muted/30 border">
-                        <InitialsAvatar name={contact.full_name} size="sm" />
+                        <InitialsAvatar name={messageRecipient.name} size="sm" />
                         <div className="flex-1 min-w-0">
-                            <p className="font-semibold">{contact.full_name}</p>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-0.5">
+                                {messagePath === 'intro' ? 'Messaging' : 'Reaching out to'}
+                            </p>
+                            <p className="font-semibold">{messageRecipient.name}</p>
                             <p className="text-sm text-muted-foreground truncate">
-                                {contact.position}{contact.company && ` @ ${contact.company}`}
+                                {messageRecipient.position}{messageRecipient.company && ` @ ${messageRecipient.company}`}
                             </p>
                         </div>
-                        {contact.linkedin_url && (
+                        {messageRecipient.linkedin_url && (
                             <a
-                                href={contact.linkedin_url}
+                                href={messageRecipient.linkedin_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-700 self-center"
@@ -449,6 +467,32 @@ export function ContactDrawer({
                             </a>
                         )}
                     </div>
+
+                    {/* For intro requests, also show who you want to be introduced to */}
+                    {messagePath === 'intro' && (
+                        <div className="flex gap-4 p-4 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/50">
+                            <InitialsAvatar name={contact.full_name} size="sm" />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs text-blue-600 uppercase tracking-wide mb-0.5">
+                                    Requesting introduction to
+                                </p>
+                                <p className="font-semibold">{contact.full_name}</p>
+                                <p className="text-sm text-muted-foreground truncate">
+                                    {contact.position}{contact.company && ` @ ${contact.company}`}
+                                </p>
+                            </div>
+                            {contact.linkedin_url && (
+                                <a
+                                    href={contact.linkedin_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-700 self-center"
+                                >
+                                    <LinkedInIcon className="w-5 h-5" />
+                                </a>
+                            )}
+                        </div>
+                    )}
 
                     {/* Two-column layout for settings */}
                     <div className="grid sm:grid-cols-2 gap-4">
@@ -529,7 +573,7 @@ export function ContactDrawer({
                 </div>
 
                 {/* Footer Actions */}
-                <div className="sticky bottom-0 bg-background border-t p-4">
+                <div className="shrink-0 bg-background border-t p-4">
                     <div className="flex gap-3">
                         <Button
                             onClick={handleCopy}
@@ -552,12 +596,12 @@ export function ContactDrawer({
                         </Button>
                         <Button
                             onClick={handleOpenLinkedIn}
-                            disabled={messagePath === 'intro' ? !connector?.linkedin_url : !contact.linkedin_url}
+                            disabled={!messageRecipient.linkedin_url}
                             size="lg"
                             className="flex-1 h-12 bg-[#0A66C2] hover:bg-[#004182]"
                         >
                             <LinkedInIcon className="w-5 h-5 mr-2" />
-                            Open LinkedIn
+                            Open {messageRecipient.name.split(' ')[0]}'s LinkedIn
                         </Button>
                     </div>
                 </div>
