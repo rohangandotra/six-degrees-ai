@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { AuthHashHandler } from "@/components/auth-hash-handler"
 import { CSPostHogProvider } from "@/providers/posthog-provider"
 import { CookieBanner } from "@/components/cookie-banner"
+import { FeedbackWidget } from "@/components/feedback-widget"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
@@ -41,6 +42,7 @@ export default function RootLayout({
           {children}
           <Toaster />
           <CookieBanner />
+          <FeedbackWidget />
           <Analytics />
         </CSPostHogProvider>
       </body>
