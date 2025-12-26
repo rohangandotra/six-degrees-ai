@@ -57,6 +57,31 @@ export default function LoginPage() {
       }
 
       if (data.user) {
+        // Check if user has completed onboarding
+        try {
+          const profileResponse = await fetch(`/api/profile?userId=${data.user.id}`)
+          const profileData = await profileResponse.json()
+
+          // If no profile or profile not completed, redirect to onboarding
+          if (!profileData.success || !profileData.profile || !profileData.profile.profile_completed) {
+            toast({
+              title: "Welcome!",
+              description: "Let's set up your profile...",
+            })
+            setTimeout(() => {
+              router.push("/onboarding")
+              router.refresh()
+            }, 500)
+            return
+          }
+        } catch (profileError) {
+          console.error("Error checking profile:", profileError)
+          // If profile check fails, still redirect to onboarding to be safe
+          router.push("/onboarding")
+          router.refresh()
+          return
+        }
+
         toast({
           title: "Login successful",
           description: "Redirecting to dashboard...",
